@@ -520,7 +520,7 @@ def get_index_cuda(subdir=context.subdir):
     return index, r
 
 
-def record(name='a', version='1.0', depends=None, build='0', build_number=0, timestamp=0, channel=None):
+def record(name='a', version='1.0', depends=None, build='0', build_number=0, timestamp=0, channel=None, **kwargs):
     return PackageRecord(
         name=name,
         version=version,
@@ -529,4 +529,5 @@ def record(name='a', version='1.0', depends=None, build='0', build_number=0, tim
         build_number=build_number,
         timestamp=timestamp,
         channel=channel,
+        **kwargs,
     )
