@@ -19,7 +19,7 @@ from ..common.constants import NULL
 log = getLogger(__name__)
 
 # duplicated code in the interest of import efficiency
-on_win = bool(sys.platform == "win32")
+on_win = sys.platform == "win32"
 user_rc_path = abspath(expanduser('~/.condarc'))
 escaped_user_rc_path = user_rc_path.replace("%", "%%")
 escaped_sys_rc_path = abspath(join(sys.prefix, '.condarc')).replace("%", "%%")
@@ -31,11 +31,13 @@ def generate_parser():
                     ' environments and packages.',
     )
     p.add_argument(
-        '-V', '--version',
+        '-V',
+        '--version',
         action='version',
-        version='conda %s' % __version__,
-        help="Show the conda version number and exit."
+        version=f'conda {__version__}',
+        help="Show the conda version number and exit.",
     )
+
     p.add_argument(
         "--debug",
         action="store_true",
@@ -115,18 +117,17 @@ class ArgumentParser(ArgumentParserBase):
         if name is None:
             return None
         for action in container:
-            if '/'.join(action.option_strings) == name:
-                return action
-            elif action.metavar == name:
-                return action
-            elif action.dest == name:
+            if (
+                '/'.join(action.option_strings) == name
+                or action.metavar == name
+                or action.dest == name
+            ):
                 return action
 
     def error(self, message):
         import re
         from .find_commands import find_executable
-        exc = sys.exc_info()[1]
-        if exc:
+        if exc := sys.exc_info()[1]:
             # this is incredibly lame, but argparse stupidly does not expose
             # reasonable hooks for customizing error handling
             if hasattr(exc, 'argument_name'):
@@ -134,21 +135,19 @@ class ArgumentParser(ArgumentParserBase):
             else:
                 argument = None
             if argument and argument.dest == "cmd":
-                m = re.match(r"invalid choice: u?'([-\w]*?)'", exc.message)
-                if m:
-                    cmd = m.group(1)
-                    if not cmd:
-                        self.print_help()
-                        sys.exit(0)
-                    else:
-                        executable = find_executable('conda-' + cmd)
+                if m := re.match(r"invalid choice: u?'([-\w]*?)'", exc.message):
+                    if cmd := m.group(1):
+                        executable = find_executable(f'conda-{cmd}')
                         if not executable:
                             from ..exceptions import CommandNotFoundError
                             raise CommandNotFoundError(cmd)
-                        args = [find_executable('conda-' + cmd)]
+                        args = [find_executable(f'conda-{cmd}')]
                         args.extend(sys.argv[2:])
                         _exec(args, os.environ)
 
+                    else:
+                        self.print_help()
+                        sys.exit(0)
         super(ArgumentParser, self).error(message)
 
     def print_help(self):
@@ -156,11 +155,9 @@ class ArgumentParser(ArgumentParserBase):
 
         if sys.argv[1:] in ([], [''], ['help'], ['-h'], ['--help']):
             from .find_commands import find_commands
-            other_commands = find_commands()
-            if other_commands:
-                builder = ['']
-                builder.append("conda commands available from other packages:")
-                builder.extend('  %s' % cmd for cmd in sorted(other_commands))
+            if other_commands := find_commands():
+                builder = ['', "conda commands available from other packages:"]
+                builder.extend(f'  {cmd}' for cmd in sorted(other_commands))
                 print('\n'.join(builder))
 
 
@@ -954,7 +951,6 @@ def configure_parser_remove(sub_parsers, name='remove'):
 
     """)
 
-    uninstall_help = "Alias for conda remove."
     if name == 'remove':
         p = sub_parsers.add_parser(
             name,
@@ -965,6 +961,7 @@ def configure_parser_remove(sub_parsers, name='remove'):
             add_help=False,
         )
     else:
+        uninstall_help = "Alias for conda remove."
         p = sub_parsers.add_parser(
             name,
             formatter_class=RawDescriptionHelpFormatter,
@@ -983,13 +980,15 @@ def configure_parser_remove(sub_parsers, name='remove'):
     solver_mode_options.add_argument(
         "--all",
         action="store_true",
-        help="%s all packages, i.e., the entire environment." % name.capitalize(),
+        help=f"{name.capitalize()} all packages, i.e., the entire environment.",
     )
+
     solver_mode_options.add_argument(
         "--features",
         action="store_true",
-        help="%s features (instead of packages)." % name.capitalize(),
+        help=f"{name.capitalize()} features (instead of packages).",
     )
+
     solver_mode_options.add_argument(
         "--force-remove", "--force",
         action="store_true",
@@ -1015,8 +1014,9 @@ def configure_parser_remove(sub_parsers, name='remove'):
         metavar='package_name',
         action="store",
         nargs='*',
-        help="Package names to %s from the environment." % name,
+        help=f"Package names to {name} from the environment.",
     )
+
     p.add_argument(
         "--dev",
         action=NullCountAction,
@@ -1240,7 +1240,6 @@ def configure_parser_update(sub_parsers, name='update'):
 
     """)
 
-    alias_help = "Alias for conda update."
     if name == 'update':
         p = sub_parsers.add_parser(
             'update',
@@ -1249,6 +1248,7 @@ def configure_parser_update(sub_parsers, name='update'):
             epilog=example % name,
         )
     else:
+        alias_help = "Alias for conda update."
         p = sub_parsers.add_parser(
             name,
             description=alias_help,

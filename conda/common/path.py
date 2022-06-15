@@ -38,9 +38,7 @@ PATH_MATCH_REGEX = (
 
 
 def is_path(value):
-    if '://' in value:
-        return False
-    return re.match(PATH_MATCH_REGEX, value)
+    return False if '://' in value else re.match(PATH_MATCH_REGEX, value)
 
 
 def expand(path):
@@ -70,19 +68,21 @@ def url_to_path(url):
     if is_path(url):
         return url
     if not url.startswith("file://"):  # pragma: no cover
-        raise CondaError("You can only turn absolute file: urls into paths (not %s)" % url)
+        raise CondaError(
+            f"You can only turn absolute file: urls into paths (not {url})"
+        )
+
     _, netloc, path, _, _ = urlsplit(url)
     from .url import percent_decode
     path = percent_decode(path)
-    if netloc not in ('', 'localhost', '127.0.0.1', '::1'):
-        if not netloc.startswith('\\\\'):
-            # The only net location potentially accessible is a Windows UNC path
-            netloc = '//' + netloc
-    else:
+    if netloc in ('', 'localhost', '127.0.0.1', '::1'):
         netloc = ''
         # Handle Windows drive letters if present
         if re.match('^/([a-z])[:|]', path, re.I):
-            path = path[1] + ':' + path[3:]
+            path = f'{path[1]}:{path[3:]}'
+    elif not netloc.startswith('\\\\'):
+            # The only net location potentially accessible is a Windows UNC path
+        netloc = f'//{netloc}'
     return netloc + path
 
 
@@ -91,7 +91,7 @@ def tokenized_startswith(test_iterable, startswith_iterable):
 
 
 def get_all_directories(files):
-    return sorted(set(tuple(f.split('/')[:-1]) for f in files) - {()})
+    return sorted({tuple(f.split('/')[:-1]) for f in files} - {()})
 
 
 def get_leaf_directories(files):
@@ -135,13 +135,16 @@ def pyc_path(py_path, python_major_minor_version):
     '''
     pyver_string = python_major_minor_version.replace('.', '')
     if pyver_string.startswith('2'):
-        return py_path + 'c'
-    else:
-        directory, py_file = split(py_path)
-        basename_root, extension = splitext(py_file)
-        pyc_file = "__pycache__" + '/' + "%s.cpython-%s%sc" % (
-            basename_root, pyver_string, extension)
-        return "%s%s%s" % (directory, '/', pyc_file) if directory else pyc_file
+        return f'{py_path}c'
+    directory, py_file = split(py_path)
+    basename_root, extension = splitext(py_file)
+    pyc_file = (
+        "__pycache__"
+        + '/'
+        + f"{basename_root}.cpython-{pyver_string}{extension}c"
+    )
+
+    return f"{directory}/{pyc_file}" if directory else pyc_file
 
 
 def missing_pyc_files(python_major_minor_version, files):
@@ -149,8 +152,7 @@ def missing_pyc_files(python_major_minor_version, files):
     py_files = (f for f in files if f.endswith('.py'))
     pyc_matches = ((py_file, pyc_path(py_file, python_major_minor_version))
                    for py_file in py_files)
-    result = tuple(match for match in pyc_matches if match[1] not in files)
-    return result
+    return tuple(match for match in pyc_matches if match[1] not in files)
 
 
 def parse_entry_point_def(ep_definition):
@@ -165,7 +167,7 @@ def get_python_short_path(python_version=None):
         return "python.exe"
     if python_version and '.' not in python_version:
         python_version = '.'.join(python_version)
-    return join("bin", "python%s" % (python_version or ''))
+    return join("bin", f"python{python_version or ''}")
 
 
 def get_python_site_packages_short_path(python_version):
@@ -175,7 +177,7 @@ def get_python_site_packages_short_path(python_version):
         return 'Lib/site-packages'
     else:
         py_ver = get_major_minor_version(python_version)
-        return 'lib/python%s/site-packages' % py_ver
+        return f'lib/python{py_ver}/site-packages'
 
 
 _VERSION_REGEX = re.compile(r"[0-9]+\.[0-9]+")
@@ -202,16 +204,14 @@ def get_major_minor_version(string, with_dot=True):
             return None
         assert pythonstr[start+1] == "."
         maj_min = pythonstr[start], pythonstr[start+2:]
+    elif match := _VERSION_REGEX.match(string):
+        version = match.group(0).split(".")
+        maj_min = version[0], version[1]
     else:
-        match = _VERSION_REGEX.match(string)
-        if match:
-            version = match.group(0).split(".")
-            maj_min = version[0], version[1]
-        else:
-            digits = "".join([c for c in string if c.isdigit()])
-            if len(digits) < 2:
-                return None
-            maj_min = digits[0], digits[1:]
+        digits = "".join([c for c in string if c.isdigit()])
+        if len(digits) < 2:
+            return None
+        maj_min = digits[0], digits[1:]
 
     return ".".join(maj_min) if with_dot else "".join(maj_min)
 
@@ -247,10 +247,7 @@ def ensure_pad(name, pad="_"):
         ''
 
     """
-    if not name or name[0] == name[-1] == pad:
-        return name
-    else:
-        return "%s%s%s" % (pad, name, pad)
+    return name if not name or name[0] == name[-1] == pad else f"{pad}{name}{pad}"
 
 
 def is_private_env_name(env_name):
@@ -325,7 +322,7 @@ def win_path_to_unix(path, root_prefix=""):
         # Does not add cygdrive.  If you need that, set root_prefix to "/cygdrive"
         def _translation(found_path):  # NOQA
             found = found_path.group(1).replace("\\", "/").replace(":", "").replace("//", "/")
-            return root_prefix + "/" + found
+            return f"{root_prefix}/{found}"
         path_re = '(?<![:/^a-zA-Z])([a-zA-Z]:[/\\\\]+(?:[^:*?"<>|]+[/\\\\]+)*[^:*?"<>|;/\\\\]+?(?![a-zA-Z]:))'  # noqa
         path = re.sub(path_re, _translation, path).replace(";/", ":/")
     return path

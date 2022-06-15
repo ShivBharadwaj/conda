@@ -26,7 +26,7 @@ def pip_installed_post_parse_hook(args, p):
 
 
 def main(*args, **kwargs):
-    os.environ[str('CONDA_PIP_UNINITIALIZED')] = str('true')
+    os.environ['CONDA_PIP_UNINITIALIZED'] = 'true'
     kwargs['post_parse_hook'] = pip_installed_post_parse_hook
     return main_main(*args, **kwargs)
 

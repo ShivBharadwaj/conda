@@ -75,9 +75,7 @@ def _main(*args, **kwargs):
     context.__init__(argparse_args=args)
     init_loggers(context)
 
-    # used with main_pip.py
-    post_parse_hook = kwargs.pop('post_parse_hook', None)
-    if post_parse_hook:
+    if post_parse_hook := kwargs.pop('post_parse_hook', None):
         post_parse_hook(args, p)
 
     from .conda_argparse import do_call

@@ -21,23 +21,23 @@ def cast(val, typ):
                 return cast(val, t)
             except TqdmTypeError:
                 pass
-        raise TqdmTypeError(val + ' : ' + typ)
+        raise TqdmTypeError(f'{val} : {typ}')
 
     # sys.stderr.write('\ndebug | `val:type`: `' + val + ':' + typ + '`.\n')
     if typ == 'bool':
-        if (val == 'True') or (val == ''):
+        if val in ['True', '']:
             return True
         elif val == 'False':
             return False
         else:
-            raise TqdmTypeError(val + ' : ' + typ)
+            raise TqdmTypeError(f'{val} : {typ}')
     try:
         return eval(typ + '("' + val + '")')
     except Exception:
         if typ == 'chr':
             return chr(ord(eval('"' + val + '"'))).encode()
         else:
-            raise TqdmTypeError(val + ' : ' + typ)
+            raise TqdmTypeError(f'{val} : {typ}')
 
 
 def posix_pipe(fin, fout, delim=b'\\n', buf_size=256,
@@ -251,7 +251,7 @@ Options:
             def cp(src, dst):
                 """copies from src path to dst"""
                 copyfile(src, dst)
-                log.info("written:" + dst)
+                log.info(f"written:{dst}")
             if manpath is not None:
                 cp(resource_filename(Requirement.parse('tqdm'), 'tqdm/tqdm.1'),
                    path.join(manpath, 'tqdm.1'))

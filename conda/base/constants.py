@@ -245,9 +245,9 @@ class UpdateModifier(Enum):
 
 class ChannelPriorityMeta(EnumMeta):
 
-    def __call__(cls, value, *args, **kwargs):
+    def __call__(self, value, *args, **kwargs):
         try:
-            return super(ChannelPriorityMeta, cls).__call__(value, *args, **kwargs)
+            return super(ChannelPriorityMeta, self).__call__(value, *args, **kwargs)
         except ValueError:
             if isinstance(value, string_types):
                 from .._vendor.auxlib.type_coercion import typify
@@ -255,8 +255,8 @@ class ChannelPriorityMeta(EnumMeta):
             if value is True:
                 value = 'flexible'
             elif value is False:
-                value = cls.DISABLED
-            return super(ChannelPriorityMeta, cls).__call__(value, *args, **kwargs)
+                value = self.DISABLED
+            return super(ChannelPriorityMeta, self).__call__(value, *args, **kwargs)
 
 
 class ChannelPriority(six_with_metaclass(ChannelPriorityMeta, Enum)):

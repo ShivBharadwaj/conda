@@ -59,13 +59,9 @@ def linux_get_libc_version():
     if family == 'NPTL':  # pragma: no cover
         for clib in (entry.path for entry in scandir("/lib") if entry.name[:7] == "libc.so"):
             clib = readlink(clib)
-            if exists(clib):
-                if clib.startswith('libuClibc'):
-                    if version.startswith('0.'):
-                        family = 'uClibc'
-                    else:
-                        family = 'uClibc-ng'
-                    return family, version
+            if exists(clib) and clib.startswith('libuClibc'):
+                family = 'uClibc' if version.startswith('0.') else 'uClibc-ng'
+                return family, version
         # This could be some other C library; it is unlikely though.
         family = 'uClibc'
         log.warning("Failed to detect non-glibc family, assuming %s (%s)", family, version)

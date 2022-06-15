@@ -99,10 +99,7 @@ def run_command(command, *arguments, **kwargs):
     log.debug("executing command >>>  conda %s", list2cmdline(arguments))
 
     is_run = arguments[0] == 'run'
-    if is_run:
-        cap_args = (None, None)
-    else:
-        cap_args = (stdout, stderr)
+    cap_args = (None, None) if is_run else (stdout, stderr)
     try:
         with argv(['python_api'] + encode_arguments(arguments)), captured(*cap_args) as c:
             if use_exception_handler:

@@ -87,7 +87,7 @@ class IndexedSet(MutableSet):
     :class:`list` and :class:`set` APIs as possible.
     """
     def __init__(self, other=None):
-        self.item_index_map = dict()
+        self.item_index_map = {}
         self.item_list = []
         self.dead_indices = []
         self._compactions = 0
@@ -129,7 +129,7 @@ class IndexedSet(MutableSet):
             num_dead = 1
             while items[-(num_dead + 1)] is _MISSING:
                 num_dead += 1
-            if ded and ded[-1][1] == len(items):
+            if ded[-1][1] == len(items):
                 del ded[-1]
             del items[-num_dead:]
 
@@ -226,29 +226,20 @@ class IndexedSet(MutableSet):
     def isdisjoint(self, other):
         "isdisjoint(other) -> return True if no overlap with other"
         iim = self.item_index_map
-        for k in other:
-            if k in iim:
-                return False
-        return True
+        return all(k not in iim for k in other)
 
     def issubset(self, other):
         "issubset(other) -> return True if other contains this set"
         if len(other) < len(self):
             return False
-        for k in self.item_index_map:
-            if k not in other:
-                return False
-        return True
+        return all(k in other for k in self.item_index_map)
 
     def issuperset(self, other):
         "issuperset(other) -> return True if set contains other"
         if len(other) > len(self):
             return False
         iim = self.item_index_map
-        for k in other:
-            if k not in iim:
-                return False
-        return True
+        return all(k in iim for k in other)
 
     def union(self, *others):
         "union(*others) -> return a new set containing this set and others"
@@ -396,9 +387,7 @@ class IndexedSet(MutableSet):
 
     def count(self, val):
         "count(val) -> count number of instances of value (0 or 1)"
-        if val in self.item_index_map:
-            return 1
-        return 0
+        return 1 if val in self.item_index_map else 0
 
     def reverse(self):
         "reverse() -> reverse the contents of the set in-place"

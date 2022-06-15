@@ -101,7 +101,7 @@ class PythonDistribution(object):
         elif anchor_full_path and isdir(anchor_full_path):
             self._metadata_dir_full_path = anchor_full_path
         else:
-            raise RuntimeError("Path not found: %s" % anchor_full_path)
+            raise RuntimeError(f"Path not found: {anchor_full_path}")
 
         self._check_files()
         self._metadata = PythonDistributionMetadata(anchor_full_path)
@@ -137,7 +137,7 @@ class PythonDistribution(object):
 
         if lines and not (lines[0].startswith('[') and lines[0].endswith(']')):
             # Add dummy section for unsectioned items
-            lines = ['[{}]'.format(global_section)] + lines
+            lines = [f'[{global_section}]'] + lines
 
         # Parse sections
         for line in lines:
@@ -165,7 +165,7 @@ class PythonDistribution(object):
             else:
                 # The section is an extra, i.e. "docs", or "tests"...
                 extras.append(section)
-                marker = '; extra == "{}"'.format(section)
+                marker = f'; extra == "{section}"'
                 new_values = [v+marker for v in values]
                 reqs.extend(new_values)
 
@@ -244,7 +244,7 @@ class PythonDistribution(object):
                 seen = []
                 records = []
                 for row in reader:
-                    cleaned_path = posix_normpath("%s%s%s" % (sp_dir, path_prepender, row[0]))
+                    cleaned_path = posix_normpath(f"{sp_dir}{path_prepender}{row[0]}")
                     if len(row) == 3:
                         checksum, size = row[1:]
                         if checksum:
@@ -324,7 +324,11 @@ class PythonDistribution(object):
 
         def pyspec_to_norm_req(pyspec):
             conda_name = pypi_name_to_conda_name(norm_package_name(pyspec.name))
-            return "%s %s" % (conda_name, pyspec.constraints) if pyspec.constraints else conda_name
+            return (
+                f"{conda_name} {pyspec.constraints}"
+                if pyspec.constraints
+                else conda_name
+            )
 
         reqs = self.get_dist_requirements()
         pyspecs = tuple(parse_specification(req) for req in reqs)
@@ -503,26 +507,22 @@ class PythonDistributionMetadata(object):
     def _process_path(path, metadata_filenames):
         """Find metadata file inside dist-info folder, or check direct file."""
         metadata_path = None
-        if path:
-            if isdir(path):
-                for fname in metadata_filenames:
-                    fpath = join(path, fname)
-                    if isfile(fpath):
-                        metadata_path = fpath
-                        break
-            elif isfile(path):
-                # '<pkg>.egg-info' file contains metadata directly
-                filenames = ['.egg-info']
-                if metadata_filenames:
-                    filenames.extend(metadata_filenames)
-                assert any(path.endswith(filename) for filename in filenames)
-                metadata_path = path
-            else:
-                # `path` does not exist
-                warnings.warn("Metadata path not found", MetadataWarning)
+        if path and isdir(path):
+            for fname in metadata_filenames:
+                fpath = join(path, fname)
+                if isfile(fpath):
+                    metadata_path = fpath
+                    break
+        elif path and not isdir(path) and isfile(path):
+            # '<pkg>.egg-info' file contains metadata directly
+            filenames = ['.egg-info']
+            if metadata_filenames:
+                filenames.extend(metadata_filenames)
+            assert any(path.endswith(filename) for filename in filenames)
+            metadata_path = path
         else:
+            # `path` does not exist
             warnings.warn("Metadata path not found", MetadataWarning)
-
         return metadata_path
 
     @classmethod
@@ -597,9 +597,7 @@ class PythonDistributionMetadata(object):
         if self._data:
             for key in keys:
                 raw_data = self._data.get(key, [])
-                for req in raw_data:
-                    data.append(req.strip())
-
+                data.extend(req.strip() for req in raw_data)
                 if data:
                     break
 
@@ -818,9 +816,7 @@ def split_spec(spec, sep):
     """Split a spec by separator and return stripped start and end parts."""
     parts = spec.rsplit(sep, 1)
     spec_start = parts[0].strip()
-    spec_end = ''
-    if len(parts) == 2:
-        spec_end = parts[-1].strip()
+    spec_end = parts[-1].strip() if len(parts) == 2 else ''
     return spec_start, spec_end
 
 
@@ -848,9 +844,7 @@ def parse_specification(spec):
     # Extract url (Assumes that there can only be one '@' inside the spec)
     spec, url = split_spec(spec, '@')
 
-    # Find name, extras and constraints
-    r = PARTIAL_PYPI_SPEC_PATTERN.match(spec)
-    if r:
+    if r := PARTIAL_PYPI_SPEC_PATTERN.match(spec):
         # Normalize name
         name = r.group('name')
         name = norm_package_name(name)  # TODO: Do we want this or not?
@@ -877,20 +871,20 @@ def get_site_packages_anchor_files(site_packages_path, site_packages_dir):
         fname = entry.name
         anchor_file = None
         if fname.endswith('.dist-info'):
-            anchor_file = "%s/%s/%s" % (site_packages_dir, fname, 'RECORD')
+            anchor_file = f"{site_packages_dir}/{fname}/RECORD"
         elif fname.endswith(".egg-info"):
             if isfile(join(site_packages_path, fname)):
-                anchor_file = "%s/%s" % (site_packages_dir, fname)
+                anchor_file = f"{site_packages_dir}/{fname}"
             else:
-                anchor_file = "%s/%s/%s" % (site_packages_dir, fname, "PKG-INFO")
+                anchor_file = f"{site_packages_dir}/{fname}/PKG-INFO"
         elif fname.endswith(".egg"):
             if isdir(join(site_packages_path, fname)):
-                anchor_file = "%s/%s/%s/%s" % (site_packages_dir, fname, "EGG-INFO", "PKG-INFO")
-            # FIXME: If it is a .egg file, we need to unzip the content to be
-            # able. Do this once and leave the directory, and remove the egg
-            # (which is a zip file in disguise?)
+                anchor_file = f"{site_packages_dir}/{fname}/EGG-INFO/PKG-INFO"
+                    # FIXME: If it is a .egg file, we need to unzip the content to be
+                    # able. Do this once and leave the directory, and remove the egg
+                    # (which is a zip file in disguise?)
         elif fname.endswith('.egg-link'):
-            anchor_file = "%s/%s" % (site_packages_dir, fname)
+            anchor_file = f"{site_packages_dir}/{fname}"
         elif fname.endswith('.pth'):
             continue
         else:
@@ -932,11 +926,9 @@ def get_dist_file_from_egg_link(egg_link_file, prefix_path):
     if egg_info_fnames:
         if len(egg_info_fnames) != 1:
             raise CondaError(
-                    "Expected exactly one `egg-info` directory in '{}', via egg-link '{}'."
-                    " Instead found: {}.  These are often left over from "
-                    "legacy operations that did not clean up correctly.  Please "
-                    "remove all but one of these.".format(egg_link_contents,
-                                                          egg_link_file, egg_info_fnames))
+                f"Expected exactly one `egg-info` directory in '{egg_link_contents}', via egg-link '{egg_link_file}'. Instead found: {egg_info_fnames}.  These are often left over from legacy operations that did not clean up correctly.  Please remove all but one of these."
+            )
+
 
         egg_info_full_path = join(egg_link_contents, egg_info_fnames[0])
 
@@ -962,9 +954,7 @@ def parse_marker(marker_string):
     variable (such as os_name).
     """
     def marker_var(remaining):
-        # either identifier, or literal string
-        m = IDENTIFIER.match(remaining)
-        if m:
+        if m := IDENTIFIER.match(remaining):
             result = m.groups()[0]
             remaining = remaining[m.end():]
         elif not remaining:
@@ -972,7 +962,7 @@ def parse_marker(marker_string):
         else:
             q = remaining[0]
             if q not in '\'"':
-                raise SyntaxError('invalid expression: %s' % remaining)
+                raise SyntaxError(f'invalid expression: {remaining}')
             oq = '\'"'.replace(q, '')
             remaining = remaining[1:]
             parts = [q]
@@ -986,12 +976,12 @@ def parse_marker(marker_string):
                 else:
                     m = STRING_CHUNK.match(remaining)
                     if not m:
-                        raise SyntaxError('error in string literal: %s' % remaining)
+                        raise SyntaxError(f'error in string literal: {remaining}')
                     parts.append(m.groups()[0])
                     remaining = remaining[m.end():]
             else:
                 s = ''.join(parts)
-                raise SyntaxError('unterminated string: %s' % s)
+                raise SyntaxError(f'unterminated string: {s}')
             parts.append(q)
             result = ''.join(parts)
             remaining = remaining[1:].lstrip()  # skip past closing quote
@@ -1001,7 +991,7 @@ def parse_marker(marker_string):
         if remaining and remaining[0] == '(':
             result, remaining = marker(remaining[1:].lstrip())
             if remaining[0] != ')':
-                raise SyntaxError('unterminated parenthesis: %s' % remaining)
+                raise SyntaxError(f'unterminated parenthesis: {remaining}')
             remaining = remaining[1:].lstrip()
         else:
             lhs, remaining = marker_var(remaining)
@@ -1059,9 +1049,7 @@ STRING_CHUNK = re.compile(r'([\s\w\.{}()*+#:;,/?!~`@$%^&=|<>\[\]-]+)')
 
 
 def _is_literal(o):
-    if not isinstance(o, string_types) or not o:
-        return False
-    return o[0] in '\'"'
+    return False if not isinstance(o, string_types) or not o else o[0] in '\'"'
 
 
 class Evaluator(object):
@@ -1092,19 +1080,19 @@ class Evaluator(object):
         if isinstance(expr, string_types):
             if expr[0] in '\'"':
                 result = expr[1:-1]
-            else:
-                if expr not in context:
-                    raise SyntaxError('unknown variable: %s' % expr)
+            elif expr in context:
                 result = context[expr]
+            else:
+                raise SyntaxError(f'unknown variable: {expr}')
         else:
             assert isinstance(expr, dict)
             op = expr['op']
             if op not in self.operations:
-                raise NotImplementedError('op not implemented: %s' % op)
+                raise NotImplementedError(f'op not implemented: {op}')
             elhs = expr['lhs']
             erhs = expr['rhs']
-            if _is_literal(expr['lhs']) and _is_literal(expr['rhs']):
-                raise SyntaxError('invalid comparison: %s %s %s' % (elhs, op, erhs))
+            if _is_literal(elhs) and _is_literal(erhs):
+                raise SyntaxError(f'invalid comparison: {elhs} {op} {erhs}')
 
             lhs = self.evaluate(elhs, context)
             rhs = self.evaluate(erhs, context)
@@ -1128,7 +1116,7 @@ def get_default_marker_context():
     """Return the default context dictionary to use when parsing markers."""
 
     def format_full_version(info):
-        version = '%s.%s.%s' % (info.major, info.minor, info.micro)
+        version = f'{info.major}.{info.minor}.{info.micro}'
         kind = info.releaselevel
         if kind != 'final':
             version += kind[0] + str(info.serial)
@@ -1183,10 +1171,10 @@ def interpret(marker, execution_context=None):
     try:
         expr, rest = parse_marker(marker)
     except Exception as e:
-        raise SyntaxError('Unable to interpret marker syntax: %s: %s' % (marker, e))
+        raise SyntaxError(f'Unable to interpret marker syntax: {marker}: {e}')
 
     if rest and rest[0] != '#':
-        raise SyntaxError('unexpected trailing data in marker: %s: %s' % (marker, rest))
+        raise SyntaxError(f'unexpected trailing data in marker: {marker}: {rest}')
 
     context = DEFAULT_MARKER_CONTEXT.copy()
     if execution_context:

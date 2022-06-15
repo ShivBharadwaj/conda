@@ -270,9 +270,8 @@ def update_in(d, keys, func, default=None, factory=dict):
         return assoc(d, k, update_in(d[k] if (k in d) else factory(),
                                      ks, func, default, factory),
                      factory)
-    else:
-        innermost = func(d[k]) if (k in d) else func(default)
-        return assoc(d, k, innermost, factory)
+    innermost = func(d[k]) if (k in d) else func(default)
+    return assoc(d, k, innermost, factory)
 
 
 def get_in(keys, coll, default=None, no_default=False):

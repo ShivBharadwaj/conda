@@ -28,28 +28,27 @@ IndexRecord = PackageRecord  # for conda-build backward compat
 
 class DistType(EntityType):
 
-    def __call__(cls, *args, **kwargs):
-        if len(args) == 1 and not kwargs:
-            value = args[0]
-            if value in Dist._cache_:
-                return Dist._cache_[value]
-            elif isinstance(value, Dist):
-                dist = value
-            elif isinstance(value, PackageRecord):
-                dist = Dist.from_string(value.fn, channel_override=value.channel.canonical_name)
-            elif hasattr(value, 'dist') and isinstance(value.dist, Dist):
-                dist = value.dist
-            elif isinstance(value, PackageInfo):
-                dist = Dist.from_string(value.repodata_record.fn,
-                                        channel_override=value.channel.canonical_name)
-            elif isinstance(value, Channel):
-                dist = Dist.from_url(value.url())
-            else:
-                dist = Dist.from_string(value)
-            Dist._cache_[value] = dist
-            return dist
+    def __call__(self, *args, **kwargs):
+        if len(args) != 1 or kwargs:
+            return super(DistType, self).__call__(*args, **kwargs)
+        value = args[0]
+        if value in Dist._cache_:
+            return Dist._cache_[value]
+        elif isinstance(value, Dist):
+            dist = value
+        elif isinstance(value, PackageRecord):
+            dist = Dist.from_string(value.fn, channel_override=value.channel.canonical_name)
+        elif hasattr(value, 'dist') and isinstance(value.dist, Dist):
+            dist = value.dist
+        elif isinstance(value, PackageInfo):
+            dist = Dist.from_string(value.repodata_record.fn,
+                                    channel_override=value.channel.canonical_name)
+        elif isinstance(value, Channel):
+            dist = Dist.from_url(value.url())
         else:
-            return super(DistType, cls).__call__(*args, **kwargs)
+            dist = Dist.from_string(value)
+        Dist._cache_[value] = dist
+        return dist
 
 
 def strip_extension(original_dist):
@@ -126,7 +125,7 @@ class Dist(Entity):
         return parts[0], parts[1], parts[2], self.channel or DEFAULTS_CHANNEL_NAME
 
     def __str__(self):
-        return "%s::%s" % (self.channel, self.dist_name) if self.channel else self.dist_name
+        return f"{self.channel}::{self.dist_name}" if self.channel else self.dist_name
 
     @property
     def is_feature_package(self):
@@ -137,10 +136,7 @@ class Dist(Entity):
         return bool(self.base_url and self.platform)
 
     def to_filename(self, extension=None):
-        if self.is_feature_package:
-            return self.dist_name
-        else:
-            return self.dist_name + self.fmt
+        return self.dist_name if self.is_feature_package else self.dist_name + self.fmt
 
     def to_matchspec(self):
         return ' '.join(self.quad[:3])
@@ -148,7 +144,7 @@ class Dist(Entity):
     def to_match_spec(self):
         from .match_spec import MatchSpec
         base = '='.join(self.quad[:3])
-        return MatchSpec("%s::%s" % (self.channel, base) if self.channel else base)
+        return MatchSpec(f"{self.channel}::{base}" if self.channel else base)
 
     @classmethod
     def from_string(cls, string, channel_override=NULL):
@@ -214,7 +210,7 @@ class Dist(Entity):
             return DistDetails(name, version, build_string, build_number, dist_name, fmt)
 
         except:
-            raise CondaError("dist_name is not a valid conda package: %s" % original_string)
+            raise CondaError(f"dist_name is not a valid conda package: {original_string}")
 
     @classmethod
     def from_url(cls, url):
@@ -291,7 +287,7 @@ class Dist(Entity):
     def rsplit(self, sep=None, maxsplit=-1):
         assert sep == '-'
         assert maxsplit == 2
-        name = '%s::%s' % (self.channel, self.quad[0]) if self.channel else self.quad[0]
+        name = f'{self.channel}::{self.quad[0]}' if self.channel else self.quad[0]
         return name, self.quad[1], self.quad[2]
 
     def startswith(self, match):

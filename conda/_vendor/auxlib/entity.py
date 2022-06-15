@@ -656,22 +656,21 @@ class ComposableField(Field):
             return None
         if isinstance(val, self._type):
             return val
+        # assuming val is a dict now
+        try:
+            # if there is a key named 'self', have to rename it
+            if hasattr(val, 'pop'):
+                val['slf'] = val.pop('self')
+        except KeyError:
+            pass  # no key of 'self', so no worries
+        if isinstance(val, self._type):
+            return val if isinstance(val, self._type) else self._type(**val)
+        elif isinstance(val, Mapping):
+            return self._type(**val)
+        elif isinstance(val, Sequence) and not isinstance(val, string_types):
+            return self._type(*val)
         else:
-            # assuming val is a dict now
-            try:
-                # if there is a key named 'self', have to rename it
-                if hasattr(val, 'pop'):
-                    val['slf'] = val.pop('self')
-            except KeyError:
-                pass  # no key of 'self', so no worries
-            if isinstance(val, self._type):
-                return val if isinstance(val, self._type) else self._type(**val)
-            elif isinstance(val, Mapping):
-                return self._type(**val)
-            elif isinstance(val, Sequence) and not isinstance(val, string_types):
-                return self._type(*val)
-            else:
-                return self._type(val)
+            return self._type(val)
 
     def dump(self, instance, instance_type, val):
         return None if val is None else val.dump()
@@ -687,45 +686,44 @@ class EntityType(type):
             # NameError: global name 'Entity' is not defined
             return ()
 
-    def __new__(mcs, name, bases, dct):
+    def __new__(cls, name, bases, dct):
         # if we're about to mask a field that's already been created with something that's
         #  not a field, then assign it to an alternate variable name
         non_field_keys = (key for key, value in iteritems(dct)
                           if not isinstance(value, Field) and not key.startswith('__'))
-        entity_subclasses = EntityType.__get_entity_subclasses(bases)
-        if entity_subclasses:
+        if entity_subclasses := EntityType.__get_entity_subclasses(bases):
             keys_to_override = [key for key in non_field_keys
                                 if any(isinstance(base.__dict__.get(key), Field)
                                        for base in entity_subclasses)]
-            dct[KEY_OVERRIDES_MAP] = dict((key, dct.pop(key)) for key in keys_to_override)
+            dct[KEY_OVERRIDES_MAP] = {key: dct.pop(key) for key in keys_to_override}
         else:
-            dct[KEY_OVERRIDES_MAP] = dict()
+            dct[KEY_OVERRIDES_MAP] = {}
 
-        return super(EntityType, mcs).__new__(mcs, name, bases, dct)
+        return super(EntityType, cls).__new__(cls, name, bases, dct)
 
-    def __init__(cls, name, bases, attr):
-        super(EntityType, cls).__init__(name, bases, attr)
+    def __init__(self, name, bases, attr):
+        super(EntityType, self).__init__(name, bases, attr)
 
         fields = odict()
         _field_sort_key = lambda x: x[1]._order_helper
-        for clz in reversed(type.mro(cls)):
+        for clz in reversed(type.mro(self)):
             clz_fields = ((name, field.set_name(name))
                           for name, field in iteritems(clz.__dict__)
                           if isinstance(field, Field))
             fields.update(sorted(clz_fields, key=_field_sort_key))
 
-        cls.__fields__ = frozendict(fields)
-        if hasattr(cls, '__register__'):
-            cls.__register__()
+        self.__fields__ = frozendict(fields)
+        if hasattr(self, '__register__'):
+            self.__register__()
 
-    def __call__(cls, *args, **kwargs):
-        instance = super(EntityType, cls).__call__(*args, **kwargs)
-        setattr(instance, '_{0}__initd'.format(cls.__name__), True)
+    def __call__(self, *args, **kwargs):
+        instance = super(EntityType, self).__call__(*args, **kwargs)
+        setattr(instance, '_{0}__initd'.format(self.__name__), True)
         return instance
 
     @property
-    def fields(cls):
-        return cls.__fields__.keys()
+    def fields(self):
+        return self.__fields__.keys()
 
 
 @with_metaclass(EntityType)
@@ -757,7 +755,7 @@ class Entity(object):
 
     @classmethod
     def from_objects(cls, *objects, **override_fields):
-        init_vars = dict()
+        init_vars = {}
         search_maps = tuple(AttrDict(o) if isinstance(o, dict) else o
                             for o in ((override_fields,) + objects))
         for key, field in iteritems(cls.__fields__):
@@ -783,8 +781,7 @@ class Entity(object):
                    (name for name, field in iteritems(self.__fields__) if field.required)
                    )
         except TypeError as e:
-            if str(e) == "reduce() of empty sequence with no initial value":
-                pass
+            pass
         except AttributeError as e:
             raise ValidationError(None, msg=e)
 

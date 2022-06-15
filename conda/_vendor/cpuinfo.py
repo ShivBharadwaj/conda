@@ -188,8 +188,7 @@ class DataSource(object):
 
     @staticmethod
     def ibm_pa_features():
-        ibm_features = glob.glob('/proc/device-tree/cpus/*/ibm,pa-features')
-        if ibm_features:
+        if ibm_features := glob.glob('/proc/device-tree/cpus/*/ibm,pa-features'):
             return run_and_get_stdout(['lsprop', ibm_features[0]])
 
     @staticmethod
@@ -236,14 +235,12 @@ def obj_to_b64(thing):
     a = thing
     b = pickle.dumps(a)
     c = base64.b64encode(b)
-    d = c.decode('utf8')
-    return d
+    return c.decode('utf8')
 
 def b64_to_obj(thing):
     try:
         a = base64.b64decode(thing)
-        b = pickle.loads(a)
-        return b
+        return pickle.loads(a)
     except:
         return {}
 
@@ -286,13 +283,16 @@ def _get_field_actual(cant_be_number, raw_string, field_names):
                 left, right = line.split(':', 1)
                 left = left.strip().lower()
                 right = right.strip()
-                if left == field_name and len(right) > 0:
-                    if cant_be_number:
-                        if not right.isdigit():
-                            return right
-                    else:
-                        return right
-
+                if (
+                    left == field_name
+                    and len(right) > 0
+                    and (
+                        cant_be_number
+                        and not right.isdigit()
+                        or not cant_be_number
+                    )
+                ):
+                    return right
     return None
 
 def _get_field(cant_be_number, raw_string, convert_to, default_value, *field_names):
@@ -313,7 +313,7 @@ def _get_field(cant_be_number, raw_string, convert_to, default_value, *field_nam
 
 def _get_hz_string_from_brand(processor_brand):
     # Just return 0 if the processor brand does not have the Hz
-    if not 'hz' in processor_brand.lower():
+    if 'hz' not in processor_brand.lower():
         return (1, '0.0')
 
     hz_brand = processor_brand.lower()
@@ -406,11 +406,14 @@ def to_friendly_bytes(input):
         r"^[0-9]+G$" : 'GB'
     }
 
-    for pattern, friendly_size in formats.items():
-        if re.match(pattern, input):
-            return "{0} {1}".format(input[ : -1].strip(), friendly_size)
-
-    return input
+    return next(
+        (
+            "{0} {1}".format(input[:-1].strip(), friendly_size)
+            for pattern, friendly_size in formats.items()
+            if re.match(pattern, input)
+        ),
+        input,
+    )
 
 def _parse_cpu_string(cpu_string):
     # Get location of fields at end of string
@@ -420,12 +423,8 @@ def _parse_cpu_string(cpu_string):
     # Processor Brand
     processor_brand = cpu_string
     if fields_index != -1:
-        processor_brand = cpu_string[0 : fields_index].strip()
-    #print('processor_brand: ', processor_brand)
-
-    fields = None
-    if fields_index != -1:
-        fields = cpu_string[fields_index : ]
+        processor_brand = cpu_string[:fields_index].strip()
+    fields = cpu_string[fields_index : ] if fields_index != -1 else None
     #print('fields: ', fields)
 
     # Hz
@@ -476,7 +475,7 @@ def _parse_dmesg_output(output):
         best_string = None
         highest_count = 0
         for cpu_string in cpu_strings:
-            count = sum([n is not None for n in cpu_string])
+            count = sum(n is not None for n in cpu_string)
             if count > highest_count:
                 highest_count = count
                 best_string = cpu_string
@@ -509,16 +508,21 @@ def _parse_dmesg_output(output):
         #print('FIELDS: ', (vendor_id, stepping, model, family))
 
         # Features
-        flag_lines = []
-        for category in ['  Features=', '  Features2=', '  AMD Features=', '  AMD Features2=']:
-            if category in output:
-                flag_lines.append(output.split(category)[1].split('\n')[0])
+        flag_lines = [
+            output.split(category)[1].split('\n')[0]
+            for category in [
+                '  Features=',
+                '  Features2=',
+                '  AMD Features=',
+                '  AMD Features2=',
+            ]
+            if category in output
+        ]
 
         flags = []
         for line in flag_lines:
             line = line.split('<')[1].split('>')[0].lower()
-            for flag in line.split(','):
-                flags.append(flag)
+            flags.extend(iter(line.split(',')))
         flags.sort()
 
         # Convert from GHz/MHz string to Hz
@@ -596,8 +600,7 @@ def parse_arch(raw_arch_string):
 
 def is_bit_set(reg, bit):
     mask = 1 << bit
-    is_set = reg & mask > 0
-    return is_set
+    return reg & mask > 0
 
 
 class CPUID(object):
@@ -620,11 +623,11 @@ class CPUID(object):
         byte_code = bytes.join(b'', byte_code)
         address = None
 
+        # Allocate a memory segment the size of the byte code, and make it executable
+        size = len(byte_code)
         if DataSource.is_windows:
-            # Allocate a memory segment the size of the byte code, and make it executable
-            size = len(byte_code)
             # Alloc at least 1 page to ensure we own all pages that we want to change protection on
-            if size < 0x1000: size = 0x1000
+            size = max(size, 0x1000)
             MEM_COMMIT = ctypes.c_ulong(0x1000)
             PAGE_READWRITE = ctypes.c_ulong(0x4)
             pfnVirtualAlloc = ctypes.windll.kernel32.VirtualAlloc
@@ -657,8 +660,6 @@ class CPUID(object):
             if not res:
                 raise Exception("Failed FlushInstructionCache")
         else:
-            # Allocate a memory segment the size of the byte code
-            size = len(byte_code)
             pfnvalloc = ctypes.pythonapi.valloc
             pfnvalloc.restype = ctypes.c_void_p
             address = pfnvalloc(ctypes.c_size_t(size))
@@ -757,8 +758,7 @@ class CPUID(object):
         # Each 4bits is a ascii letter in the name
         vendor_id = []
         for reg in [ebx, edx, ecx]:
-            for n in [0, 8, 16, 24]:
-                vendor_id.append(chr((reg >> n) & 0xFF))
+            vendor_id.extend(chr((reg >> n) & 0xFF) for n in [0, 8, 16, 24])
         vendor_id = ''.join(vendor_id)
 
         return vendor_id
@@ -791,14 +791,11 @@ class CPUID(object):
 
     # http://en.wikipedia.org/wiki/CPUID#EAX.3D80000000h:_Get_Highest_Extended_Function_Supported
     def get_max_extension_support(self):
-        # Check for extension support
-        max_extension_support = self._run_asm(
-            b"\xB8\x00\x00\x00\x80" # mov ax,0x80000000
-            b"\x0f\xa2"             # cpuid
-            b"\xC3"                 # ret
+        return self._run_asm(
+            b"\xB8\x00\x00\x00\x80"  # mov ax,0x80000000
+            b"\x0f\xa2"  # cpuid
+            b"\xC3"  # ret
         )
-
-        return max_extension_support
 
     # http://en.wikipedia.org/wiki/CPUID#EAX.3D1:_Processor_Info_and_Feature_Bits
     def get_flags(self, max_extension_support):
@@ -1211,9 +1208,7 @@ class CPUID(object):
 
         end = self.get_ticks()
 
-        ticks = (end - start)
-
-        return ticks
+        return (end - start)
 
 def _actual_get_cpu_info_from_cpuid(queue):
     '''
@@ -1230,7 +1225,7 @@ def _actual_get_cpu_info_from_cpuid(queue):
     arch, bits = parse_arch(DataSource.raw_arch_string)
 
     # Return none if this is not an X86 CPU
-    if not arch in ['X86_32', 'X86_64']:
+    if arch not in ['X86_32', 'X86_64']:
         queue.put(obj_to_b64({}))
         return
 
@@ -1295,7 +1290,7 @@ def _get_cpu_info_from_cpuid():
     arch, bits = parse_arch(DataSource.raw_arch_string)
 
     # Return {} if this is not an X86 CPU
-    if not arch in ['X86_32', 'X86_64']:
+    if arch not in ['X86_32', 'X86_64']:
         return {}
 
     try:
@@ -1413,7 +1408,7 @@ def _get_cpu_info_from_cpufreq_info():
         hz_brand = output.split('current CPU frequency is')[1].split('\n')[0]
         i = hz_brand.find('Hz')
         assert(i != -1)
-        hz_brand = hz_brand[0 : i+2].strip().lower()
+        hz_brand = hz_brand[:i+2].strip().lower()
 
         if hz_brand.endswith('mhz'):
             scale = 6
@@ -1450,8 +1445,9 @@ def _get_cpu_info_from_lscpu():
 
         info = {}
 
-        new_hz = _get_field(False, output, None, None, 'CPU max MHz', 'CPU MHz')
-        if new_hz:
+        if new_hz := _get_field(
+            False, output, None, None, 'CPU max MHz', 'CPU MHz'
+        ):
             new_hz = to_hz_string(new_hz)
             scale = 6
             info['hz_advertised'] = to_friendly_hz(new_hz, scale)
@@ -1459,12 +1455,10 @@ def _get_cpu_info_from_lscpu():
             info['hz_advertised_raw'] = to_raw_hz(new_hz, scale)
             info['hz_actual_raw'] = to_raw_hz(new_hz, scale)
 
-        vendor_id = _get_field(False, output, None, None, 'Vendor ID')
-        if vendor_id:
+        if vendor_id := _get_field(False, output, None, None, 'Vendor ID'):
             info['vendor_id'] = vendor_id
 
-        brand = _get_field(False, output, None, None, 'Model name')
-        if brand:
+        if brand := _get_field(False, output, None, None, 'Model name'):
             info['brand'] = brand
 
         family = _get_field(False, output, None, None, 'CPU family')
@@ -1479,25 +1473,23 @@ def _get_cpu_info_from_lscpu():
         if model and model.isdigit():
             info['model'] = int(model)
 
-        l1_data_cache_size = _get_field(False, output, None, None, 'L1d cache')
-        if l1_data_cache_size:
+        if l1_data_cache_size := _get_field(
+            False, output, None, None, 'L1d cache'
+        ):
             info['l1_data_cache_size'] = to_friendly_bytes(l1_data_cache_size)
 
-        l1_instruction_cache_size = _get_field(False, output, None, None, 'L1i cache')
-        if l1_instruction_cache_size:
+        if l1_instruction_cache_size := _get_field(
+            False, output, None, None, 'L1i cache'
+        ):
             info['l1_instruction_cache_size'] = to_friendly_bytes(l1_instruction_cache_size)
 
-        l2_cache_size = _get_field(False, output, None, None, 'L2 cache')
-        if l2_cache_size:
+        if l2_cache_size := _get_field(False, output, None, None, 'L2 cache'):
             info['l2_cache_size'] = to_friendly_bytes(l2_cache_size)
 
-        l3_cache_size = _get_field(False, output, None, None, 'L3 cache')
-        if l3_cache_size:
+        if l3_cache_size := _get_field(False, output, None, None, 'L3 cache'):
             info['l3_cache_size'] = to_friendly_bytes(l3_cache_size)
 
-        # Flags
-        flags = _get_field(False, output, None, None, 'flags', 'Features')
-        if flags:
+        if flags := _get_field(False, output, None, None, 'flags', 'Features'):
             flags = flags.split()
             flags.sort()
             info['flags'] = flags
@@ -1519,7 +1511,7 @@ def _get_cpu_info_from_dmesg():
 
     # If dmesg fails return {}
     returncode, output = DataSource.dmesg_a()
-    if output == None or returncode != 0:
+    if output is None or returncode != 0:
         return {}
 
     return _parse_dmesg_output(output)
@@ -1539,7 +1531,7 @@ def _get_cpu_info_from_ibm_pa_features():
 
         # If ibm,pa-features fails return {}
         returncode, output = DataSource.ibm_pa_features()
-        if output == None or returncode != 0:
+        if output is None or returncode != 0:
             return {}
 
         # Filter out invalid characters from output
@@ -1548,7 +1540,7 @@ def _get_cpu_info_from_ibm_pa_features():
         value = ''.join(value)
 
         # Get data converted to Uint32 chunks
-        left = int(value[0 : 8], 16)
+        left = int(value[:8], 16)
         right = int(value[8 : 16], 16)
 
         # Get the CPU flags
@@ -1659,7 +1651,7 @@ def _get_cpu_info_from_cat_var_run_dmesg_boot():
 
     # If dmesg.boot fails return {}
     returncode, output = DataSource.cat_var_run_dmesg_boot()
-    if output == None or returncode != 0:
+    if output is None or returncode != 0:
         return {}
 
     return _parse_dmesg_output(output)
@@ -1677,7 +1669,7 @@ def _get_cpu_info_from_sysctl():
 
         # If sysctl fails return {}
         returncode, output = DataSource.sysctl_machdep_cpu_hw_cpufrequency()
-        if output == None or returncode != 0:
+        if output is None or returncode != 0:
             return {}
 
         # Various fields
@@ -1743,7 +1735,7 @@ def _get_cpu_info_from_sysinfo_v1():
 
         # If sysinfo fails return {}
         returncode, output = DataSource.sysinfo_cpu()
-        if output == None or returncode != 0:
+        if output is None or returncode != 0:
             return {}
 
         # Various fields
@@ -1758,8 +1750,7 @@ def _get_cpu_info_from_sysinfo_v1():
         flags = []
         for line in output.split('\n'):
             if line.startswith('\t\t'):
-                for flag in line.strip().lower().split():
-                    flags.append(flag)
+                flags.extend(iter(line.strip().lower().split()))
         flags.sort()
 
         # Convert from GHz/MHz string to Hz
@@ -1818,8 +1809,7 @@ def _get_cpu_info_from_sysinfo_v2():
             retval = []
             for line in output.split('\n')[1:]:
                 if not line.startswith('                '): break
-                for entry in line.strip().lower().split(' '):
-                    retval.append(entry)
+                retval.extend(iter(line.strip().lower().split(' ')))
             return retval
 
         flags = get_subsection_flags(output.split('Features: ')[1]) + \
@@ -1865,7 +1855,7 @@ def _get_cpu_info_from_wmic():
             return {}
 
         returncode, output = DataSource.wmic_cpu()
-        if output == None or returncode != 0:
+        if output is None or returncode != 0:
             return {}
 
         # Break the list into key values pairs
@@ -1886,11 +1876,11 @@ def _get_cpu_info_from_wmic():
         # Get cache sizes
         l2_cache_size = value.get('L2CacheSize')
         if l2_cache_size:
-            l2_cache_size = l2_cache_size + ' KB'
+            l2_cache_size = f'{l2_cache_size} KB'
 
         l3_cache_size = value.get('L3CacheSize')
         if l3_cache_size:
-            l3_cache_size = l3_cache_size + ' KB'
+            l3_cache_size = f'{l3_cache_size} KB'
 
         # Get family, model, and stepping
         family, model, stepping = '', '', ''
@@ -1965,8 +1955,7 @@ def _get_cpu_info_from_registry():
 
         def is_set(bit):
             mask = 0x80000000 >> bit
-            retval = mask & feature_bits > 0
-            return retval
+            return mask & feature_bits > 0
 
         # http://en.wikipedia.org/wiki/CPUID
         # http://unix.stackexchange.com/questions/43539/what-do-the-flags-in-proc-cpuinfo-mean
@@ -2039,12 +2028,12 @@ def _get_cpu_info_from_kstat():
 
         # If isainfo fails return {}
         returncode, flag_output = DataSource.isainfo_vb()
-        if flag_output == None or returncode != 0:
+        if flag_output is None or returncode != 0:
             return {}
 
         # If kstat fails return {}
         returncode, kstat = DataSource.kstat_m_cpu_info()
-        if kstat == None or returncode != 0:
+        if kstat is None or returncode != 0:
             return {}
 
         # Various fields
@@ -2168,7 +2157,7 @@ def get_cpu_info():
 # Make sure we are running on a supported system
 def _check_arch():
     arch, bits = parse_arch(DataSource.raw_arch_string)
-    if not arch in ['X86_32', 'X86_64', 'ARM_7', 'ARM_8', 'PPC_64', 'S390X']:
+    if arch not in ['X86_32', 'X86_64', 'ARM_7', 'ARM_8', 'PPC_64', 'S390X']:
         raise Exception("py-cpuinfo currently only works on X86 and some PPC, S390X and ARM CPUs.")
 
 def main():
@@ -2178,8 +2167,7 @@ def main():
         sys.stderr.write(str(err) + "\n")
         sys.exit(1)
 
-    info = get_cpu_info()
-    if info:
+    if info := get_cpu_info():
         print('python version: {0}'.format(info.get('python_version', '')))
         print('cpuinfo version: {0}'.format(info.get('cpuinfo_version', '')))
         print('Vendor ID: {0}'.format(info.get('vendor_id', '')))

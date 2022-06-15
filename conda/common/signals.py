@@ -40,8 +40,7 @@ def signal_handler(handler):
     _thread_local = threading.local()
     _thread_local.previous_handlers = []
     for signame in INTERRUPT_SIGNALS:
-        sig = getattr(signal, signame, None)
-        if sig:
+        if sig := getattr(signal, signame, None):
             log.debug("registering handler for %s", signame)
             try:
                 prev_handler = signal.signal(sig, handler)

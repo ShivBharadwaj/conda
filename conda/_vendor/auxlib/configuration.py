@@ -45,12 +45,12 @@ log = logging.getLogger(__name__)
 def make_env_key(app_name, key):
     """Creates an environment key-equivalent for the given key"""
     key = key.replace('-', '_').replace(' ', '_')
-    return str("_".join((x.upper() for x in (app_name, key))))
+    return "_".join((x.upper() for x in (app_name, key)))
 
 
 @memoize
 def reverse_env_key(app_name, key):
-    app = app_name.upper() + '_'
+    app = f'{app_name.upper()}_'
     assert key.startswith(app), "{0} is not a(n) {1} environment key".format(key, app)
     return key[len(app):].lower()
 
@@ -101,11 +101,11 @@ class Configuration(object):
         self.__initial_load = True
 
         # The ordered list of sources from which to load key, value pairs.
-        self.__sources = list()
+        self.__sources = []
 
         # The object that holds the actual key, value pairs after they're loaded from sources.
         # Keys are stored as all lower-case. Access by key is provided in a case-insensitive way.
-        self._config_map = dict()
+        self._config_map = {}
 
         self._registered_env_keys = set()  # TODO: add explanation comments
         self._required_keys = set(listify(required_parameters))
@@ -154,7 +154,7 @@ class Configuration(object):
         `os.environ` instead of this class' `set_env` method, or if the underlying configuration
         file is changed externally.
         """
-        self._config_map = dict()
+        self._config_map = {}
         self._registered_env_keys = set()
         self.__reload_sources(force)
         self.__load_environment_keys()
@@ -187,8 +187,7 @@ class Configuration(object):
         raise AssignmentError()
 
     def __iter__(self):
-        for key in self._registered_env_keys | set(self._config_map.keys()):
-            yield key
+        yield from self._registered_env_keys | set(self._config_map.keys())
 
     def items(self):
         for key in self:
@@ -219,7 +218,7 @@ class Configuration(object):
                 self.__append_source(additional_source, force_reload, source)
 
     def __load_environment_keys(self):
-        app_prefix = self.appname.upper() + '_'
+        app_prefix = f'{self.appname.upper()}_'
         for env_key in os.environ:
             if env_key.startswith(app_prefix):
                 self._registered_env_keys.add(reverse_env_key(self.appname, env_key))
@@ -229,8 +228,7 @@ class Configuration(object):
 
     def __ensure_required_keys(self):
         available_keys = self._registered_env_keys | set(self._config_map.keys())
-        missing_keys = self._required_keys - available_keys
-        if missing_keys:
+        if missing_keys := self._required_keys - available_keys:
             raise EnvironmentError("Required key(s) not found in environment\n"
                                    "  or configuration sources.\n"
                                    "  Missing Keys: {0}".format(list(missing_keys)))
@@ -292,7 +290,7 @@ class YamlSource(Source):
 
     def __init__(self, location, provides=None):
         self._location = location
-        self._provides = provides if provides else None
+        self._provides = provides or None
 
     def load(self):
         with PackageFile(self._location, self.parent_config.package) as fh:
@@ -301,7 +299,7 @@ class YamlSource(Source):
             if self.provides is None:
                 return contents
             else:
-                return dict((key, contents[key]) for key in self.provides)
+                return {key: contents[key] for key in self.provides}
 
 
 class EnvironmentMappedSource(Source):
@@ -314,5 +312,4 @@ class EnvironmentMappedSource(Source):
     def load(self):
         mapped_source = self._sourcemap[self.parent_config[self._envvar]]
         mapped_source.parent_config = self.parent_config
-        params = mapped_source.load()
-        return params
+        return mapped_source.load()

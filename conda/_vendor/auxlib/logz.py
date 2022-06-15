@@ -29,16 +29,15 @@ def set_root_level(level=INFO):
 
 def attach_stderr(level=INFO):
     has_stderr_handler = any(handler.name == 'stderr' for handler in root_log.handlers)
-    if not has_stderr_handler:
-        handler = StreamHandler(stderr)
-        handler.name = 'stderr'
-        if level is not None:
-            handler.setLevel(level)
-        handler.setFormatter(DEBUG_FORMATTER if level == DEBUG else INFO_FORMATTER)
-        root_log.addHandler(handler)
-        return True
-    else:
+    if has_stderr_handler:
         return False
+    handler = StreamHandler(stderr)
+    handler.name = 'stderr'
+    if level is not None:
+        handler.setLevel(level)
+    handler.setFormatter(DEBUG_FORMATTER if level == DEBUG else INFO_FORMATTER)
+    root_log.addHandler(handler)
+    return True
 
 
 def detach_stderr():
@@ -67,7 +66,7 @@ def jsondumps(obj):
 
 
 def fullname(obj):
-    return obj.__module__ + "." + obj.__class__.__name__
+    return f"{obj.__module__}.{obj.__class__.__name__}"
 
 
 request_header_sort_dict = {
@@ -94,8 +93,7 @@ def stringify(obj, content_max_len=0):
                                                bottle_object.get('SERVER_PROTOCOL')))
         builder += ["{0}: {1}".format(key, value) for key, value in bottle_object.headers.items()]
         builder.append('')
-        body = bottle_object.body.read().strip()
-        if body:
+        if body := bottle_object.body.read().strip():
             builder.append(body)
 
     def requests_models_PreparedRequest_builder(builder, request_object):

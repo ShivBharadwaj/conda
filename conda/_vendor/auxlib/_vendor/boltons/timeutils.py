@@ -66,10 +66,7 @@ def dt_to_timestamp(dt):
     :class:`LocalTZ` object in this module, then pass the result of
     that to ``dt_to_timestamp``.
     """
-    if dt.tzinfo:
-        td = dt - EPOCH_AWARE
-    else:
-        td = dt - EPOCH_NAIVE
+    td = dt - EPOCH_AWARE if dt.tzinfo else dt - EPOCH_NAIVE
     return total_seconds(td)
 
 
@@ -115,8 +112,9 @@ _BOUND_DELTAS = [b[0] for b in _BOUNDS]
 
 _FLOAT_PATTERN = r'[+-]?\ *(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?'
 _PARSE_TD_RE = re.compile("((?P<value>%s)\s*(?P<unit>\w)\w*)" % _FLOAT_PATTERN)
-_PARSE_TD_KW_MAP = dict([(unit[0], unit + 's')
-                         for _, _, unit in reversed(_BOUNDS[:-2])])
+_PARSE_TD_KW_MAP = dict(
+    [(unit[0], f'{unit}s') for _, _, unit in reversed(_BOUNDS[:-2])]
+)
 
 
 def parse_timedelta(text):
@@ -167,9 +165,7 @@ parse_td = parse_timedelta  # legacy alias
 def _cardinalize_time_unit(unit, value):
     # removes dependency on strutils; nice and simple because
     # all time units cardinalize normally
-    if value == 1:
-        return unit
-    return unit + 's'
+    return unit if value == 1 else f'{unit}s'
 
 
 def decimal_relative_time(d, other=None, ndigits=0, cardinalize=True):
@@ -244,9 +240,7 @@ def relative_time(d, other=None, ndigits=0):
 
     """
     drt, unit = decimal_relative_time(d, other, ndigits, cardinalize=True)
-    phrase = 'ago'
-    if drt < 0:
-        phrase = 'from now'
+    phrase = 'from now' if drt < 0 else 'ago'
     return '%g %s %s' % (abs(drt), unit, phrase)
 
 
@@ -337,12 +331,10 @@ def daterange(start, stop, step=1, inclusive=False):
     except TypeError:
         y_step, m_step, d_step = 0, 0, step
     else:
-        y_step, m_step = int(y_step), int(m_step)
+        y_step, m_step = y_step, m_step
     if isinstance(d_step, int):
         d_step = timedelta(days=int(d_step))
-    elif isinstance(d_step, timedelta):
-        pass
-    else:
+    elif not isinstance(d_step, timedelta):
         raise ValueError('step expected int, timedelta, or tuple'
                          ' (year, month, day), not: %r' % step)
 
@@ -434,28 +426,23 @@ class LocalTZInfo(tzinfo):
         return local_t.tm_isdst > 0
 
     def utcoffset(self, dt):
-        if self.is_dst(dt):
-            return self._dst_offset
-        return self._std_offset
+        return self._dst_offset if self.is_dst(dt) else self._std_offset
 
     def dst(self, dt):
-        if self.is_dst(dt):
-            return self._dst_offset - self._std_offset
-        return ZERO
+        return self._dst_offset - self._std_offset if self.is_dst(dt) else ZERO
 
     def tzname(self, dt):
         return time.tzname[self.is_dst(dt)]
 
     def __repr__(self):
-        return '%s()' % self.__class__.__name__
+        return f'{self.__class__.__name__}()'
 
 
 LocalTZ = LocalTZInfo()
 
 
 def _first_sunday_on_or_after(dt):
-    days_to_go = 6 - dt.weekday()
-    if days_to_go:
+    if days_to_go := 6 - dt.weekday():
         dt += timedelta(days_to_go)
     return dt
 
@@ -502,10 +489,7 @@ class USTimeZone(tzinfo):
         return self.reprname
 
     def tzname(self, dt):
-        if self.dst(dt):
-            return self.dstname
-        else:
-            return self.stdname
+        return self.dstname if self.dst(dt) else self.stdname
 
     def utcoffset(self, dt):
         return self.stdoffset + self.dst(dt)
@@ -521,7 +505,7 @@ class USTimeZone(tzinfo):
 
         # Find start and end times for US DST. For years before 1967, return
         # ZERO for no DST.
-        if 2006 < dt.year:
+        if dt.year > 2006:
             dststart, dstend = DSTSTART_2007, DSTEND_2007
         elif 1986 < dt.year < 2007:
             dststart, dstend = DSTSTART_1987_2006, DSTEND_1987_2006
@@ -535,10 +519,7 @@ class USTimeZone(tzinfo):
 
         # Can't compare naive to aware objects, so strip the timezone
         # from dt first.
-        if start <= dt.replace(tzinfo=None) < end:
-            return HOUR
-        else:
-            return ZERO
+        return HOUR if start <= dt.replace(tzinfo=None) < end else ZERO
 
 
 Eastern = USTimeZone(-5, "Eastern",  "EST", "EDT")

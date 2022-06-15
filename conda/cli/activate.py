@@ -13,12 +13,12 @@ from ..utils import shells
 
 
 def help(command, shell):
+    from ..exceptions import CondaSystemExit
     # sys.argv[1] will be ..checkenv in activate if an environment is already
     # activated
     # get grandparent process name to see which shell we're using
     if command in ('..activate', '..checkenv'):
         if shell in ["cmd.exe", "powershell.exe"]:
-            from ..exceptions import CondaSystemExit
             raise CondaSystemExit("""Usage: activate ENV
 
 Adds the 'Scripts' and 'Library\\bin' directory of the environment ENV to the front of PATH.
@@ -26,7 +26,6 @@ ENV may either refer to just the name of the environment, or the full
 prefix path.""")
 
         else:
-            from ..exceptions import CondaSystemExit
             raise CondaSystemExit("""Usage: source activate ENV
 
 Adds the 'bin' directory of the environment ENV to the front of PATH.
@@ -34,20 +33,19 @@ ENV may either refer to just the name of the environment, or the full
 prefix path.""")
     elif command == '..deactivate':
         if shell in ["cmd.exe", "powershell.exe"]:
-            from ..exceptions import CondaSystemExit
             raise CondaSystemExit("""Usage: deactivate
 
 Removes the environment prefix, 'Scripts' and 'Library\\bin' directory
 of the environment ENV from the front of PATH.""")
         else:
-            from ..exceptions import CondaSystemExit
             raise CondaSystemExit("""Usage: source deactivate
 
 Removes the 'bin' directory of the environment activated with 'source
 activate' from PATH. """)
     else:
-        from ..exceptions import CondaSystemExit
-        raise CondaSystemExit("No help available for command %s" % ensure_text_type(sys.argv[1]))
+        raise CondaSystemExit(
+            f"No help available for command {ensure_text_type(sys.argv[1])}"
+        )
 
 
 def locate_prefix_by_name(ctx, name):
@@ -68,7 +66,7 @@ def prefix_from_arg(arg, shell):
             prefix = abspath(native_path.strip("\""))
         else:
             from ..exceptions import CondaValueError
-            raise CondaValueError('Could not find environment: %s' % native_path)
+            raise CondaValueError(f'Could not find environment: {native_path}')
     else:
         prefix = locate_prefix_by_name(context, arg.replace('/', os.path.sep))
     return prefix
@@ -81,9 +79,7 @@ def _get_prefix_paths(prefix):
         yield os.path.join(prefix, 'Library', 'usr', 'bin')
         yield os.path.join(prefix, 'Library', 'bin')
         yield os.path.join(prefix, 'Scripts')
-        yield os.path.join(prefix, 'bin')
-    else:
-        yield os.path.join(prefix, 'bin')
+    yield os.path.join(prefix, 'bin')
 
 
 def binpath_from_arg(arg, shell, going_to_shell=True):
@@ -94,7 +90,7 @@ def binpath_from_arg(arg, shell, going_to_shell=True):
     if going_to_shell:
         return [shelldict['path_to'](path) for path in _get_prefix_paths(prefix)]
     else:
-        return [path for path in _get_prefix_paths(prefix)]
+        return list(_get_prefix_paths(prefix))
 
 
 def pathlist_to_str(paths, escape_backslashes=True):
@@ -105,22 +101,20 @@ def pathlist_to_str(paths, escape_backslashes=True):
     path = ' and '.join(paths)
     if on_win and escape_backslashes:
         # escape for printing to console - ends up as single \
-        path = regex.sub(r'(?<!\\)\\(?!\\)', r'\\\\', path)
+        return regex.sub(r'(?<!\\)\\(?!\\)', r'\\\\', path)
     else:
-        path = path.replace("\\\\", "\\")
-    return path
+        return path.replace("\\\\", "\\")
 
 
 def get_activate_path(prefix, shell, going_to_shell=True):
     shelldict = shells[shell] if shell else {}
     binpath = binpath_from_arg(prefix, shell, going_to_shell)
 
-    # prepend our new entries onto the existing path and make sure that the separator is native
-    if going_to_shell:
-        path = shelldict['pathsep'].join(binpath)
-    else:
-        path = os.pathsep.join(binpath)
-    return path
+    return (
+        shelldict['pathsep'].join(binpath)
+        if going_to_shell
+        else os.pathsep.join(binpath)
+    )
 
 
 def main():
@@ -137,11 +131,7 @@ def main():
         # all execution paths sys.exit at end.
         help(sys_argv[1], sys_argv[2])
 
-    if len(sys_argv) > 2:
-        shell = sys_argv[2]
-    else:
-        shell = ''
-
+    shell = sys_argv[2] if len(sys_argv) > 2 else ''
     if regex.match('^..(?:de|)activate$', sys_argv[1]):
         arg_num = len(sys_argv)
         if arg_num != 4:
@@ -165,12 +155,21 @@ def main():
         activation_path = get_activate_path(sys_argv[3], shell, False)
 
         if os.getenv('_CONDA_HOLD'):
-            new_path = regex.sub(r'%s(:?)' % regex.escape(activation_path),
-                                 r'CONDA_PATH_PLACEHOLDER\1',
-                                 os.environ[str('PATH')], 1)
+            new_path = regex.sub(
+                f'{regex.escape(activation_path)}(:?)',
+                r'CONDA_PATH_PLACEHOLDER\1',
+                os.environ['PATH'],
+                1,
+            )
+
         else:
-            new_path = regex.sub(r'%s(:?)' % regex.escape(activation_path), r'',
-                                 os.environ[str('PATH')], 1)
+            new_path = regex.sub(
+                f'{regex.escape(activation_path)}(:?)',
+                r'',
+                os.environ['PATH'],
+                1,
+            )
+
 
         new_path = shells[shell]['path_to'](new_path)
         print(new_path)

@@ -15,11 +15,7 @@ log = getLogger(__name__)
 
 # maxsize transitions to type(long) on 2.7 64-bit machines and breaks int
 # type checks in logic.py
-if sys.version_info.major == 2:
-    _BIG_NUMBER = sys.maxint
-else:
-    _BIG_NUMBER = sys.maxsize
-
+_BIG_NUMBER = sys.maxint if sys.version_info.major == 2 else sys.maxsize
 TRUE = _BIG_NUMBER
 FALSE = -TRUE
 
@@ -160,8 +156,7 @@ class _SatSolver(object):
         run_kwargs.update(kwargs)
         solver = self.setup(m, **run_kwargs)
         sat_solution = self.invoke(solver)
-        solution = self.process_solution(sat_solution)
-        return solution
+        return self.process_solution(sat_solution)
 
     def setup(self, m, **kwargs):
         """Create a solver instance, add the clauses to it, and return it."""
@@ -199,9 +194,7 @@ class _PycoSatSolver(_SatSolver):
         return sat_solution
 
     def process_solution(self, sat_solution):
-        if sat_solution in ("UNSAT", "UNKNOWN"):
-            return None
-        return sat_solution
+        return None if sat_solution in ("UNSAT", "UNKNOWN") else sat_solution
 
 
 class _PyCryptoSatSolver(_SatSolver):
@@ -235,19 +228,12 @@ class _PySatSolver(_SatSolver):
         return solver
 
     def invoke(self, solver):
-        if not solver.solve():
-            sat_solution = None
-        else:
-            sat_solution = solver.get_model()
+        sat_solution = solver.get_model() if solver.solve() else None
         solver.delete()
         return sat_solution
 
     def process_solution(self, sat_solution):
-        if sat_solution is None:
-            solution = None
-        else:
-            solution = sat_solution
-        return solution
+        return None if sat_solution is None else sat_solution
 
 
 _sat_solver_str_to_cls = {
@@ -271,7 +257,7 @@ class Clauses(object):
         try:
             sat_solver_cls = _sat_solver_str_to_cls[sat_solver_str]
         except KeyError:
-            raise NotImplementedError("Unknown SAT solver: {}".format(sat_solver_str))
+            raise NotImplementedError(f"Unknown SAT solver: {sat_solver_str}")
         self._sat_solver = sat_solver_cls()
 
         # Bind some methods of _sat_solver to reduce lookups and call overhead.
@@ -487,9 +473,11 @@ class Clauses(object):
         return pval, nval
 
     def AtMostOne_NSQ(self, vals, polarity):
-        combos = []
-        for v1, v2 in combinations(map(self.Not, vals), 2):
-            combos.append(self.Or(v1, v2, polarity))
+        combos = [
+            self.Or(v1, v2, polarity)
+            for v1, v2 in combinations(map(self.Not, vals), 2)
+        ]
+
         return self.Combine(combos, polarity)
 
     def AtMostOne_BDD(self, vals, polarity=None):
@@ -532,7 +520,7 @@ class Clauses(object):
         #  => IF xN THEN l - cN <= S         <= u - cN
         #           ELSE l      <= S         <= u
         # we use memoization to prune common subexpressions
-        total = sum(c for c in coeffs[:nterms])
+        total = sum(coeffs[:nterms])
         target = (nterms-1, 0, total)
         call_stack = [target]
         ret = {}
@@ -587,7 +575,7 @@ class Clauses(object):
         else:
             nprune = 0
         # Tighten bounds
-        total = sum(c for c in coeffs[:nterms])
+        total = sum(coeffs[:nterms])
         if preprocess:
             lo = max([lo, 0])
             hi = min([hi, total])
@@ -605,8 +593,7 @@ class Clauses(object):
     def _run_sat(self, m, limit=0):
         if log.isEnabledFor(DEBUG):
             log.debug("Invoking SAT with clause count: %s", self.get_clause_count())
-        solution = self._sat_solver.run(m, limit=limit)
-        return solution
+        return self._sat_solver.run(m, limit=limit)
 
     def sat(self, additional=None, includeIf=False, limit=0):
         """

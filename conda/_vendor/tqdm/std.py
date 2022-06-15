@@ -180,9 +180,12 @@ class Bar(object):
             else:
                 raise KeyError
         except (KeyError, AttributeError):
-            warn("Unknown colour (%s); valid choices: [hex (#00ff00), %s]" % (
-                 value, ", ".join(self.COLOURS)),
-                 TqdmWarning, stacklevel=2)
+            warn(
+                f'Unknown colour ({value}); valid choices: [hex (#00ff00), {", ".join(self.COLOURS)}]',
+                TqdmWarning,
+                stacklevel=2,
+            )
+
             self._colour = None
 
     def __format__(self, format_spec):
@@ -456,7 +459,7 @@ class tqdm(Comparable):
             total_fmt = str(total) if total is not None else '?'
 
         try:
-            postfix = ', ' + postfix if postfix else ''
+            postfix = f', {postfix}' if postfix else ''
         except TypeError:
             pass
 
@@ -472,7 +475,7 @@ class tqdm(Comparable):
         if prefix:
             # old prefix setup work around
             bool_prefix_colon_already = (prefix[-2:] == ": ")
-            l_bar = prefix if bool_prefix_colon_already else prefix + ": "
+            l_bar = prefix if bool_prefix_colon_already else f"{prefix}: "
         else:
             l_bar = ''
 
@@ -553,9 +556,11 @@ class tqdm(Comparable):
             return disp_trim(res, ncols) if ncols else res
         else:
             # no total: no progressbar, ETA, just progress stats
-            return ((prefix + ": ") if prefix else '') + \
-                '{0}{1} [{2}, {3}{4}]'.format(
-                    n_fmt, unit, elapsed_str, rate_fmt, postfix)
+            return (
+                f"{prefix}: " if prefix else ''
+            ) + '{0}{1} [{2}, {3}{4}]'.format(
+                n_fmt, unit, elapsed_str, rate_fmt, postfix
+            )
 
     def __new__(cls, *_, **__):
         instance = object.__new__(cls)
@@ -600,12 +605,12 @@ class tqdm(Comparable):
             # else:
             if not instance.gui:
                 last = (instance.nrows or 20) - 1
-                # find unfixed (`pos >= 0`) overflow (`pos >= nrows - 1`)
-                instances = list(filter(
-                    lambda i: hasattr(i, "pos") and last <= i.pos,
-                    cls._instances))
-                # set first found to current `pos`
-                if instances:
+                if instances := list(
+                    filter(
+                        lambda i: hasattr(i, "pos") and last <= i.pos,
+                        cls._instances,
+                    )
+                ):
                     inst = min(instances, key=lambda i: i.pos)
                     inst.clear(nolock=True)
                     inst.pos = abs(instance.pos)
@@ -1005,31 +1010,33 @@ class tqdm(Comparable):
             with self._lock:
                 self.pos = self._get_free_pos(self)
                 self._instances.remove(self)
-            raise (
-                TqdmDeprecationWarning(
-                    "`nested` is deprecated and automated.\n"
-                    "Use `position` instead for manual control.\n",
-                    fp_write=getattr(file, 'write', sys.stderr.write))
-                if "nested" in kwargs else
-                TqdmKeyError("Unknown argument(s): " + str(kwargs)))
+            raise TqdmDeprecationWarning(
+                "`nested` is deprecated and automated.\n"
+                "Use `position` instead for manual control.\n",
+                fp_write=getattr(file, 'write', sys.stderr.write),
+            ) if "nested" in kwargs else TqdmKeyError(
+                f"Unknown argument(s): {str(kwargs)}"
+            )
+
 
         # Preprocess the arguments
         if ((ncols is None or nrows is None) and
-            (file in (sys.stderr, sys.stdout))) or \
-                dynamic_ncols:  # pragma: no cover
+            (file in (sys.stderr, sys.stdout))):  # pragma: no cover
             if dynamic_ncols:
                 dynamic_ncols = _screen_shape_wrapper()
                 if dynamic_ncols:
                     ncols, nrows = dynamic_ncols(file)
-            else:
-                _dynamic_ncols = _screen_shape_wrapper()
-                if _dynamic_ncols:
-                    _ncols, _nrows = _dynamic_ncols(file)
-                    if ncols is None:
-                        ncols = _ncols
-                    if nrows is None:
-                        nrows = _nrows
+            elif _dynamic_ncols := _screen_shape_wrapper():
+                _ncols, _nrows = _dynamic_ncols(file)
+                if ncols is None:
+                    ncols = _ncols
+                if nrows is None:
+                    nrows = _nrows
 
+        elif dynamic_ncols:  # pragma: no cover
+            dynamic_ncols = _screen_shape_wrapper()
+            if dynamic_ncols:
+                ncols, nrows = dynamic_ncols(file)
         if miniters is None:
             miniters = 0
             dynamic_miniters = True
@@ -1045,7 +1052,7 @@ class tqdm(Comparable):
         if ascii is None:
             ascii = not _supports_unicode(file)
 
-        if bar_format and not ((ascii is True) or _is_ascii(ascii)):
+        if bar_format and ascii is not True and not _is_ascii(ascii):
             # Convert bar format into unicode since terminal uses unicode
             bar_format = _unicode(bar_format)
 
@@ -1095,11 +1102,7 @@ class tqdm(Comparable):
         # if nested, at initial sp() call we replace '\r' by '\n' to
         # not overwrite the outer progress bar
         with self._lock:
-            if position is None:
-                self.pos = self._get_free_pos(self)
-            else:  # mark fixed positions as negative
-                self.pos = -position
-
+            self.pos = self._get_free_pos(self) if position is None else -position
         if not gui:
             # Initialize the screen printer
             self.sp = self.status_printer(self.fp)
@@ -1163,8 +1166,7 @@ class tqdm(Comparable):
         # If the bar is disabled, then just walk the iterable
         # (note: keep this check outside the loop for performance)
         if self.disable:
-            for obj in iterable:
-                yield obj
+            yield from iterable
             return
 
         mininterval = self.mininterval
@@ -1386,7 +1388,7 @@ class tqdm(Comparable):
         refresh  : bool, optional
             Forces refresh [default: True].
         """
-        self.desc = desc + ': ' if desc else ''
+        self.desc = f'{desc}: ' if desc else ''
         if refresh:
             self.refresh()
 
@@ -1422,8 +1424,10 @@ class tqdm(Comparable):
                 postfix[key] = str(postfix[key])
             # Else if it's a string, don't need to preprocess anything
         # Stitch together to get the final postfix
-        self.postfix = ', '.join(key + '=' + postfix[key].strip()
-                                 for key in postfix.keys())
+        self.postfix = ', '.join(
+            f'{key}={postfix[key].strip()}' for key in postfix.keys()
+        )
+
         if refresh:
             self.refresh()
 

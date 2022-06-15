@@ -42,8 +42,7 @@ def encrypt(secret_key, data):
 def decrypt(secret_key, encryption_key_encrypted, encrypted_data):
     hashed_secret = generate_hash_from_secret(secret_key)
     message_encryption_key = aes_decrypt(hashed_secret, encryption_key_encrypted)
-    data = aes_decrypt(message_encryption_key, encrypted_data)
-    return data
+    return aes_decrypt(message_encryption_key, encrypted_data)
 
 
 def as_base64(content):

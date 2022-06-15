@@ -26,7 +26,7 @@ class ChannelType(type):
     single arg.
     """
 
-    def __call__(cls, *args, **kwargs):
+    def __call__(self, *args, **kwargs):
         if len(args) == 1 and not kwargs:
             value = args[0]
             if isinstance(value, Channel):
@@ -36,15 +36,17 @@ class ChannelType(type):
             else:
                 c = Channel._cache_[value] = Channel.from_value(value)
                 return c
+        elif 'channels' in kwargs:
+            # presence of 'channels' kwarg indicates MultiChannel
+            name = kwargs['name']
+            channels = tuple(
+                super(ChannelType, self).__call__(**_kwargs)
+                for _kwargs in kwargs['channels']
+            )
+
+            return MultiChannel(name, channels)
         else:
-            if 'channels' in kwargs:
-                # presence of 'channels' kwarg indicates MultiChannel
-                name = kwargs['name']
-                channels = tuple(super(ChannelType, cls).__call__(**_kwargs)
-                                 for _kwargs in kwargs['channels'])
-                return MultiChannel(name, channels)
-            else:
-                return super(ChannelType, cls).__call__(*args, **kwargs)
+            return super(ChannelType, self).__call__(*args, **kwargs)
 
 
 @with_metaclass(ChannelType)
@@ -124,18 +126,17 @@ class Channel(object):
         if name and scheme:
             return Channel(scheme=scheme, auth=auth, location=test_url, token=token,
                            name=name.strip('/'))
-        if scheme:
-            if ca.location and test_url.startswith(ca.location):
-                location, name = ca.location, test_url.replace(ca.location, '', 1)
-            else:
-                url_parts = urlparse(test_url)
-                location = Url(host=url_parts.host, port=url_parts.port).url
-                name = url_parts.path or ''
-            return Channel(scheme=scheme, auth=auth, location=location, token=token,
-                           name=name.strip('/'))
-        else:
+        if not scheme:
             return Channel(scheme=ca.scheme, auth=ca.auth, location=ca.location, token=ca.token,
                            name=name and name.strip('/') or channel_url.strip('/'))
+        if ca.location and test_url.startswith(ca.location):
+            location, name = ca.location, test_url.replace(ca.location, '', 1)
+        else:
+            url_parts = urlparse(test_url)
+            location = Url(host=url_parts.host, port=url_parts.port).url
+            name = url_parts.path or ''
+        return Channel(scheme=scheme, auth=auth, location=location, token=token,
+                       name=name.strip('/'))
 
     @property
     def canonical_name(self):
@@ -165,12 +166,14 @@ class Channel(object):
         # fall back to the equivalent of self.base_url
         # re-defining here because base_url for MultiChannel is None
         if self.scheme:
-            cn = self.__canonical_name = "%s://%s" % (self.scheme,
-                                                      join_url(self.location, self.name))
-            return cn
+            cn = (
+                self.__canonical_name
+            ) = f"{self.scheme}://{join_url(self.location, self.name)}"
+
         else:
             cn = self.__canonical_name = join_url(self.location, self.name).lstrip('/')
-            return cn
+
+        return cn
 
     def urls(self, with_credentials=False, subdirs=None):
         if subdirs is None:
@@ -193,8 +196,7 @@ class Channel(object):
                 if self.platform != 'noarch':
                     yield 'noarch'
             else:
-                for subdir in subdirs:
-                    yield subdir
+                yield from subdirs
 
         bases = (join_url(base, p) for p in _platforms())
 
@@ -222,15 +224,15 @@ class Channel(object):
         base = join_url(*base)
 
         if with_credentials and self.auth:
-            return "%s://%s@%s" % (self.scheme, self.auth, base)
+            return f"{self.scheme}://{self.auth}@{base}"
         else:
-            return "%s://%s" % (self.scheme, base)
+            return f"{self.scheme}://{base}"
 
     @property
     def base_url(self):
         if self.canonical_name == UNKNOWN_CHANNEL:
             return None
-        return "%s://%s" % (self.scheme, join_url(self.location, self.name))
+        return f"{self.scheme}://{join_url(self.location, self.name)}"
 
     @property
     def base_urls(self):
@@ -245,10 +247,7 @@ class Channel(object):
 
     def __str__(self):
         base = self.base_url or self.name
-        if self.subdir:
-            return join_url(base, self.subdir)
-        else:
-            return base
+        return join_url(base, self.subdir) if self.subdir else base
 
     def __repr__(self):
         return 'Channel("%s")' % (join_url(self.name, self.subdir) if self.subdir else self.name)
@@ -256,13 +255,12 @@ class Channel(object):
     def __eq__(self, other):
         if isinstance(other, Channel):
             return self.location == other.location and self.name == other.name
-        else:
-            try:
-                _other = Channel(other)
-                return self.location == _other.location and self.name == _other.name
-            except Exception as e:
-                log.debug("%r", e)
-                return False
+        try:
+            _other = Channel(other)
+            return self.location == _other.location and self.name == _other.name
+        except Exception as e:
+            log.debug("%r", e)
+            return False
 
     def __hash__(self):
         return hash((self.location, self.name))
@@ -358,11 +356,10 @@ def _get_channel_for_name(channel_name):
     def _get_channel_for_name_helper(name):
         if name in context.custom_channels:
             return context.custom_channels[name]
-        else:
-            test_name = name.rsplit('/', 1)[0]  # progressively strip off path segments
-            if test_name == name:
-                return None
-            return _get_channel_for_name_helper(test_name)
+        test_name = name.rsplit('/', 1)[0]  # progressively strip off path segments
+        if test_name == name:
+            return None
+        return _get_channel_for_name_helper(test_name)
 
     _stripped, platform = split_platform(context.known_subdirs, channel_name)
     channel = _get_channel_for_name_helper(_stripped)

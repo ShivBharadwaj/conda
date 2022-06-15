@@ -14,9 +14,9 @@ import sys
 from tempfile import mkdtemp
 import warnings as _warnings
 
-on_win = bool(sys.platform == "win32")
-on_mac = bool(sys.platform == "darwin")
-on_linux = bool(sys.platform == "linux")
+on_win = sys.platform == "win32"
+on_mac = sys.platform == "darwin"
+on_linux = sys.platform == "linux"
 
 PY2 = sys.version_info[0] == 2
 PY3 = sys.version_info[0] == 3
@@ -30,10 +30,7 @@ ENCODE_ARGS=False
 def encode_for_env_var(value):
     if isinstance(value, str):
         return value
-    if sys.version_info[0] == 2:
-        _unicode = unicode
-    else:
-        _unicode = str
+    _unicode = unicode if sys.version_info[0] == 2 else str
     if isinstance(value, (str, _unicode)):
         try:
             return bytes(value, encoding='utf-8')
@@ -191,8 +188,12 @@ def with_metaclass(Type, skip_attrs=set(('__dict__', '__weakref__'))):
     """
 
     def _clone_with_metaclass(Class):
-        attrs = dict((key, value) for key, value in iteritems(vars(Class))
-                     if key not in skip_attrs)
+        attrs = {
+            key: value
+            for key, value in iteritems(vars(Class))
+            if key not in skip_attrs
+        }
+
         return Type(Class.__name__, Class.__bases__, attrs)
 
     return _clone_with_metaclass
@@ -286,16 +287,12 @@ def ensure_unicode(value):
 def ensure_fs_path_encoding(value):
     try:
         return value.encode(FILESYSTEM_ENCODING)
-    except AttributeError:
-        return value
-    except UnicodeEncodeError:
+    except (AttributeError, UnicodeEncodeError):
         return value
 
 
 def ensure_utf8_encoding(value):
     try:
         return value.encode('utf-8')
-    except AttributeError:
-        return value
-    except UnicodeEncodeError:
+    except (AttributeError, UnicodeEncodeError):
         return value

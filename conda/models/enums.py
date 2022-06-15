@@ -31,9 +31,7 @@ class Arch(Enum):
 
     @classmethod
     def from_sys(cls):
-        if sys.platform == 'zos':
-            return cls['z']
-        return cls[machine()]
+        return cls['z'] if sys.platform == 'zos' else cls[machine()]
 
     def __json__(self):
         return self.value
@@ -66,7 +64,7 @@ class FileMode(Enum):
     binary = 'binary'
 
     def __str__(self):
-        return "%s" % self.value
+        return f"{self.value}"
 
 
 class LinkType(Enum):

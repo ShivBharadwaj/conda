@@ -73,7 +73,7 @@ def explicit(specs, prefix, verbose=False, force_extract=True, index_args=None, 
         # parse URL
         m = url_pat.match(spec)
         if m is None:
-            raise ParseError('Could not parse explicit URL: %s' % spec)
+            raise ParseError(f'Could not parse explicit URL: {spec}')
         url_p, fn, md5sum = m.group('url_p'), m.group('fn'), m.group('md5')
         url = join_url(url_p, fn)
         # url_p is everything but the tarball_basename and the md5sum
@@ -94,7 +94,7 @@ def explicit(specs, prefix, verbose=False, force_extract=True, index_args=None, 
     # need to add package name to fetch_specs so that history parsing keeps track of them correctly
     specs_pcrecs = tuple([spec, next(PackageCacheData.query_all(spec), None)]
                          for spec in fetch_specs)
-    assert not any(spec_pcrec[1] is None for spec_pcrec in specs_pcrecs)
+    assert all(spec_pcrec[1] is not None for spec_pcrec in specs_pcrecs)
 
     precs_to_remove = []
     prefix_data = PrefixData(prefix)
@@ -102,8 +102,7 @@ def explicit(specs, prefix, verbose=False, force_extract=True, index_args=None, 
         new_spec = MatchSpec(spec, name=pcrec.name)
         specs_pcrecs[q][0] = new_spec
 
-        prec = prefix_data.get(pcrec.name, None)
-        if prec:
+        if prec := prefix_data.get(pcrec.name, None):
             # If we've already got matching specifications, then don't bother re-linking it
             if next(prefix_data.query(new_spec), None):
                 specs_pcrecs[q][0] = None
@@ -217,10 +216,10 @@ def clone_env(prefix1, prefix2, verbose=True, quiet=False, index_args=None):
             fh = sys.stderr if context.json else sys.stdout
             print('The following packages cannot be cloned out of the root environment:', file=fh)
             for prec in itervalues(filter):
-                print(' - ' + prec.dist_str(), file=fh)
+                print(f' - {prec.dist_str()}', file=fh)
         drecs = {prec for prec in PrefixData(prefix1).iter_records() if prec['name'] not in filter}
     else:
-        drecs = {prec for prec in PrefixData(prefix1).iter_records()}
+        drecs = set(PrefixData(prefix1).iter_records())
 
     # Resolve URLs for packages that do not have URLs
     index = {}
@@ -245,10 +244,7 @@ def clone_env(prefix1, prefix2, verbose=True, quiet=False, index_args=None):
         raise PackagesNotFoundError(notfound)
 
     # Assemble the URL and channel list
-    urls = {}
-    for prec in drecs:
-        urls[prec] = prec['url']
-
+    urls = {prec: prec['url'] for prec in drecs}
     precs = tuple(PrefixGraph(urls).graph)
     urls = [urls[prec] for prec in precs]
 

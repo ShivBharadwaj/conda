@@ -101,27 +101,29 @@ def default_python_default():
 
 
 def default_python_validation(value):
-    if value:
-        if len(value) >= 3 and value[1] == '.':
-            try:
-                value = float(value)
-                if 2.0 <= value < 4.0:
-                    return True
-            except ValueError:  # pragma: no cover
-                pass
-    else:
+    if not value:
         # Set to None or '' meaning no python pinning
         return True
 
+    if len(value) >= 3 and value[1] == '.':
+        try:
+            value = float(value)
+            if 2.0 <= value < 4.0:
+                return True
+        except ValueError:  # pragma: no cover
+            pass
     return "default_python value '%s' not of the form '[23].[0-9][0-9]?' or ''" % value
 
 
 def ssl_verify_validation(value):
-    if isinstance(value, string_types):
-        if not isfile(value) and not isdir(value):
-            return ("ssl_verify value '%s' must be a boolean, a path to a "
-                    "certificate bundle file, or a path to a directory containing "
-                    "certificates of trusted CAs." % value)
+    if (
+        isinstance(value, string_types)
+        and not isfile(value)
+        and not isdir(value)
+    ):
+        return ("ssl_verify value '%s' must be a boolean, a path to a "
+                "certificate bundle file, or a path to a directory containing "
+                "certificates of trusted CAs." % value)
     return True
 
 
@@ -416,10 +418,7 @@ class Context(Configuration):
     @property
     def arch_name(self):
         m = platform.machine()
-        if m in non_x86_machines:
-            return m
-        else:
-            return _arch_names[self.bits]
+        return m if m in non_x86_machines else _arch_names[self.bits]
 
     @property
     def conda_private(self):
@@ -431,31 +430,29 @@ class Context(Configuration):
 
     @property
     def default_threads(self):
-        return self._default_threads if self._default_threads else None
+        return self._default_threads or None
 
     @property
     def repodata_threads(self):
-        return self._repodata_threads if self._repodata_threads else self.default_threads
+        return self._repodata_threads or self.default_threads
 
     @property
     def verify_threads(self):
         if self._verify_threads:
-            threads = self._verify_threads
+            return self._verify_threads
         elif self.default_threads:
-            threads = self.default_threads
+            return self.default_threads
         else:
-            threads = 1
-        return threads
+            return 1
 
     @property
     def execute_threads(self):
         if self._execute_threads:
-            threads = self._execute_threads
+            return self._execute_threads
         elif self.default_threads:
-            threads = self.default_threads
+            return self.default_threads
         else:
-            threads = 1
-        return threads
+            return 1
 
     @property
     def subdir(self):
@@ -463,7 +460,7 @@ class Context(Configuration):
             return self._subdir
         m = platform.machine()
         if m in non_x86_machines:
-            return '%s-%s' % (self.platform, m)
+            return f'{self.platform}-{m}'
         elif self.platform == 'zos':
             return 'zos-z'
         else:
@@ -471,7 +468,7 @@ class Context(Configuration):
 
     @property
     def subdirs(self):
-        return self._subdirs if self._subdirs else (self.subdir, 'noarch')
+        return self._subdirs or (self.subdir, 'noarch')
 
     @memoizedproperty
     def known_subdirs(self):
@@ -479,10 +476,7 @@ class Context(Configuration):
 
     @property
     def bits(self):
-        if self.force_32bit:
-            return 32
-        else:
-            return 8 * struct.calcsize("P")
+        return 32 if self.force_32bit else 8 * struct.calcsize("P")
 
     @property
     def root_dir(self):
@@ -514,15 +508,14 @@ class Context(Configuration):
     def pkgs_dirs(self):
         if self._pkgs_dirs:
             return tuple(IndexedSet(expand(p) for p in self._pkgs_dirs))
-        else:
-            cache_dir_name = 'pkgs32' if context.force_32bit else 'pkgs'
-            fixed_dirs = (
-                self.root_prefix,
-                join('~', '.conda'),
-            )
-            if on_win:
-                fixed_dirs += user_data_dir(APP_NAME, APP_NAME),
-            return tuple(IndexedSet(expand(join(p, cache_dir_name)) for p in (fixed_dirs)))
+        cache_dir_name = 'pkgs32' if context.force_32bit else 'pkgs'
+        fixed_dirs = (
+            self.root_prefix,
+            join('~', '.conda'),
+        )
+        if on_win:
+            fixed_dirs += user_data_dir(APP_NAME, APP_NAME),
+        return tuple(IndexedSet(expand(join(p, cache_dir_name)) for p in (fixed_dirs)))
 
     @memoizedproperty
     def trash_dir(self):
@@ -600,10 +593,7 @@ class Context(Configuration):
     def signing_metadata_url_base(self):
         """ Base URL where artifact verification signing metadata (*.root.json,
         key_mgr.json) can be obtained. """
-        if self._signing_metadata_url_base:
-            return self._signing_metadata_url_base
-        else:
-            return None
+        return self._signing_metadata_url_base or None
 
     @property
     def conda_exe_vars_dict(self):
@@ -613,21 +603,30 @@ class Context(Configuration):
         '''
 
         if context.dev:
-            return OrderedDict([('CONDA_EXE', sys.executable),
-                                ('PYTHONPATH', os.path.dirname(CONDA_PACKAGE_ROOT) + '{}{}'.format(
-                                    os.pathsep, os.environ.get('PYTHONPATH', ''))),
-                                ('_CE_M', '-m'),
-                                ('_CE_CONDA', 'conda'),
-                                ('CONDA_PYTHON_EXE', sys.executable)])
-        else:
-            bin_dir = 'Scripts' if on_win else 'bin'
-            exe = 'conda.exe' if on_win else 'conda'
-            # I was going to use None to indicate a variable to unset, but that gets tricky with
-            # error-on-undefined.
-            return OrderedDict([('CONDA_EXE', os.path.join(sys.prefix, bin_dir, exe)),
-                                ('_CE_M', ''),
-                                ('_CE_CONDA', ''),
-                                ('CONDA_PYTHON_EXE', sys.executable)])
+            return OrderedDict(
+                [
+                    ('CONDA_EXE', sys.executable),
+                    (
+                        'PYTHONPATH',
+                        (
+                            os.path.dirname(CONDA_PACKAGE_ROOT)
+                            + f"{os.pathsep}{os.environ.get('PYTHONPATH', '')}"
+                        ),
+                    ),
+                    ('_CE_M', '-m'),
+                    ('_CE_CONDA', 'conda'),
+                    ('CONDA_PYTHON_EXE', sys.executable),
+                ]
+            )
+
+        bin_dir = 'Scripts' if on_win else 'bin'
+        exe = 'conda.exe' if on_win else 'conda'
+        # I was going to use None to indicate a variable to unset, but that gets tricky with
+        # error-on-undefined.
+        return OrderedDict([('CONDA_EXE', os.path.join(sys.prefix, bin_dir, exe)),
+                            ('_CE_M', ''),
+                            ('_CE_CONDA', ''),
+                            ('CONDA_PYTHON_EXE', sys.executable)])
 
     @memoizedproperty
     def channel_alias(self):
@@ -676,27 +675,37 @@ class Context(Configuration):
                 Channel.make_simple_channel(self.channel_alias, url) for url in urls)
              ) for name, urls in iteritems(self._custom_multichannels)
         )
-        all_multichannels = odict(
+        return odict(
             (name, channels)
-            for name, channels in concat(map(iteritems, (
-                custom_multichannels,
-                reserved_multichannels,  # reserved comes last, so reserved overrides custom
-            )))
+            for name, channels in concat(
+                map(
+                    iteritems,
+                    (
+                        custom_multichannels,
+                        reserved_multichannels,  # reserved comes last, so reserved overrides custom
+                    ),
+                )
+            )
         )
-        return all_multichannels
 
     @memoizedproperty
     def custom_channels(self):
         from ..models.channel import Channel
         custom_channels = (Channel.make_simple_channel(self.channel_alias, url, name)
                            for name, url in iteritems(self._custom_channels))
-        channels_from_multichannels = concat(channel for channel
-                                             in itervalues(self.custom_multichannels))
-        all_channels = odict((x.name, x) for x in (ch for ch in concatv(
-            channels_from_multichannels,
-            custom_channels,
-        )))
-        return all_channels
+        channels_from_multichannels = concat(
+            iter(itervalues(self.custom_multichannels))
+        )
+
+        return odict(
+            (x.name, x)
+            for x in iter(
+                concatv(
+                    channels_from_multichannels,
+                    custom_channels,
+                )
+            )
+        )
 
     @property
     def channels(self):
@@ -708,8 +717,10 @@ class Context(Configuration):
                 raise OperationNotAllowed(dals("""
                 Overriding channels has been disabled.
                 """))
-            elif not (self._argparse_args and 'channel' in self._argparse_args
-                      and self._argparse_args['channel']):
+            elif (
+                'channel' not in self._argparse_args
+                or not self._argparse_args['channel']
+            ):
                 from ..exceptions import CommandArgumentError
                 raise CommandArgumentError(dals("""
                 At least one -c / --channel flag must be supplied when using --override-channels.
@@ -770,10 +781,13 @@ class Context(Configuration):
 
     @memoizedproperty
     def user_agent(self):
-        builder = ["conda/%s requests/%s" % (CONDA_VERSION, self.requests_version)]
-        builder.append("%s/%s" % self.python_implementation_name_version)
-        builder.append("%s/%s" % self.platform_system_release)
-        builder.append("%s/%s" % self.os_distribution_name_version)
+        builder = [
+            f"conda/{CONDA_VERSION} requests/{self.requests_version}",
+            "%s/%s" % self.python_implementation_name_version,
+            "%s/%s" % self.platform_system_release,
+            "%s/%s" % self.os_distribution_name_version,
+        ]
+
         if self.libc_family_version[0]:
             builder.append("%s/%s" % self.libc_family_version)
         return " ".join(builder)
@@ -1512,17 +1526,19 @@ def determine_target_prefix(ctx, args=None):
         disallowed_chars = ('/', ' ', ':', '#')
         if any(_ in prefix_name for _ in disallowed_chars):
             from ..exceptions import CondaValueError
-            builder = ["Invalid environment name: '" + prefix_name + "'"]
-            builder.append("  Characters not allowed: {}".format(disallowed_chars))
+            builder = [
+                "Invalid environment name: '" + prefix_name + "'",
+                f"  Characters not allowed: {disallowed_chars}",
+            ]
+
             raise CondaValueError("\n".join(builder))
         if prefix_name in (ROOT_ENV_NAME, 'root'):
             return ctx.root_prefix
-        else:
-            from ..exceptions import EnvironmentNameNotFound
-            try:
-                return locate_prefix_by_name(prefix_name)
-            except EnvironmentNameNotFound:
-                return join(_first_writable_envs_dir(), prefix_name)
+        from ..exceptions import EnvironmentNameNotFound
+        try:
+            return locate_prefix_by_name(prefix_name)
+        except EnvironmentNameNotFound:
+            return join(_first_writable_envs_dir(), prefix_name)
 
 
 def _first_writable_envs_dir():
@@ -1546,8 +1562,7 @@ def _first_writable_envs_dir():
                 log.trace("Tried envs_dir but not writable: %s", envs_dir)
         else:
             from ..gateways.disk.create import create_envs_directory
-            was_created = create_envs_directory(envs_dir)
-            if was_created:
+            if was_created := create_envs_directory(envs_dir):
                 return envs_dir
 
     from ..exceptions import NoWritableEnvsDirError

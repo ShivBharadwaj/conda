@@ -172,7 +172,7 @@ def initialize_std_loggers():
     formatter = Formatter("%(message)s")
 
     for stream in ('stdout', 'stderr'):
-        logger = getLogger('conda.%s' % stream)
+        logger = getLogger(f'conda.{stream}')
         logger.handlers = []
         logger.setLevel(INFO)
         handler = StdStreamHandler(stream)
@@ -182,7 +182,7 @@ def initialize_std_loggers():
         logger.addFilter(TokenURLFilter())
         logger.propagate = False
 
-        stdlog_logger = getLogger('conda.%slog' % stream)
+        stdlog_logger = getLogger(f'conda.{stream}log')
         stdlog_logger.handlers = []
         stdlog_logger.setLevel(DEBUG)
         stdlog_handler = StdStreamHandler(stream)

@@ -29,8 +29,13 @@ def hex_octal_to_int(ho):
     o9 = ord('9')
     oA = ord('A')
     oF = ord('F')
-    res = ho - o0 if ho >= o0 and ho <= o9 else (ho - oA + 10) if ho >= oA and ho <= oF else None
-    return res
+    return (
+        ho - o0
+        if ho >= o0 and ho <= o9
+        else (ho - oA + 10)
+        if ho >= oA and ho <= oF
+        else None
+    )
 
 
 @memoize
@@ -39,9 +44,7 @@ def percent_decode(path):
     # This is not fast so avoid when we can.
     if '%' not in path:
         return path
-    ranges = []
-    for m in re.finditer(r'(%[0-9A-F]{2})', path):
-        ranges.append((m.start(), m.end()))
+    ranges = [(m.start(), m.end()) for m in re.finditer(r'(%[0-9A-F]{2})', path)]
     if not len(ranges):
         return path
 
@@ -55,7 +58,7 @@ def percent_decode(path):
             continue
         c = c.encode('ascii')
         emit = c
-        if c == b'%':
+        if emit == b'%':
             for r in ranges:
                 if i == r[0]:
                     import struct
@@ -117,7 +120,7 @@ def path_to_url(path):
 
     # https://blogs.msdn.microsoft.com/ie/2006/12/06/file-uris-in-windows/
     if len(path) > 1 and path[1] == ':':
-        path = file_scheme + '/' + path
+        path = f'{file_scheme}/{path}'
     else:
         path = file_scheme + path
     return path
@@ -270,7 +273,7 @@ def split_anaconda_token(url):
     """
     _token_match = re.search(r'/t/([a-zA-Z0-9-]*)', url)
     token = _token_match.groups()[0] if _token_match else None
-    cleaned_url = url.replace('/t/' + token, '', 1) if token is not None else url
+    cleaned_url = url.replace(f'/t/{token}', '', 1) if token is not None else url
     return cleaned_url.rstrip('/'), token
 
 
@@ -285,13 +288,16 @@ def split_platform(known_subdirs, url):
     """
     _platform_match = _split_platform_re(known_subdirs).search(url)
     platform = _platform_match.groups()[0] if _platform_match else None
-    cleaned_url = url.replace('/' + platform, '', 1) if platform is not None else url
+    cleaned_url = (
+        url.replace(f'/{platform}', '', 1) if platform is not None else url
+    )
+
     return cleaned_url.rstrip('/'), platform
 
 
 @memoize
 def _split_platform_re(known_subdirs):
-    _platform_match_regex = r'/(%s)(?:/|$)' % r'|'.join(r'%s' % d for d in known_subdirs)
+    _platform_match_regex = f"/({r'|'.join(f'{d}' for d in known_subdirs)})(?:/|$)"
     return re.compile(_platform_match_regex, re.IGNORECASE)
 
 
@@ -344,7 +350,7 @@ def get_proxy_username_and_pass(scheme):
 
 def add_username_and_password(url, username, password):
     url_parts = parse_url(url)._asdict()
-    url_parts['auth'] = username + ':' + quote(password, '')
+    url_parts['auth'] = f'{username}:' + quote(password, '')
     return Url(**url_parts).url
 
 

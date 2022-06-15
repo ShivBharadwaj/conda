@@ -67,10 +67,10 @@ class Solver(object):
         """
         self.prefix = prefix
         self.channels = IndexedSet(Channel(c) for c in channels or context.channels)
-        self.subdirs = tuple(s for s in subdirs or context.subdirs)
-        self.specs_to_add = frozenset(MatchSpec.merge(s for s in specs_to_add))
+        self.subdirs = tuple(subdirs or context.subdirs)
+        self.specs_to_add = frozenset(MatchSpec.merge(iter(specs_to_add)))
         self.specs_to_add_names = frozenset(_.name for _ in self.specs_to_add)
-        self.specs_to_remove = frozenset(MatchSpec.merge(s for s in specs_to_remove))
+        self.specs_to_remove = frozenset(MatchSpec.merge(iter(specs_to_remove)))
         self.neutered_specs = tuple()
         self._command = command
 
@@ -110,18 +110,17 @@ class Solver(object):
             # is in the commented out get_install_transaction() function below. Exercised at
             # the integration level in the PrivateEnvIntegrationTests in test_create.py.
             raise NotImplementedError()
-        else:
-            unlink_precs, link_precs = self.solve_for_diff(update_modifier, deps_modifier,
-                                                           prune, ignore_pinned,
-                                                           force_remove, force_reinstall,
-                                                           should_retry_solve)
-            stp = PrefixSetup(self.prefix, unlink_precs, link_precs,
-                              self.specs_to_remove, self.specs_to_add, self.neutered_specs)
-            # TODO: Only explicitly requested remove and update specs are being included in
-            #   History right now. Do we need to include other categories from the solve?
+        unlink_precs, link_precs = self.solve_for_diff(update_modifier, deps_modifier,
+                                                       prune, ignore_pinned,
+                                                       force_remove, force_reinstall,
+                                                       should_retry_solve)
+        stp = PrefixSetup(self.prefix, unlink_precs, link_precs,
+                          self.specs_to_remove, self.specs_to_add, self.neutered_specs)
+        # TODO: Only explicitly requested remove and update specs are being included in
+        #   History right now. Do we need to include other categories from the solve?
 
-            self._notify_conda_outdated(link_precs)
-            return UnlinkLinkTransaction(stp)
+        self._notify_conda_outdated(link_precs)
+        return UnlinkLinkTransaction(stp)
 
     def solve_for_diff(self, update_modifier=NULL, deps_modifier=NULL, prune=NULL,
                        ignore_pinned=NULL, force_remove=NULL, force_reinstall=NULL,
@@ -160,11 +159,13 @@ class Solver(object):
             self.prefix, final_precs, self.specs_to_add, force_reinstall
         )
 
-        # assert that all unlink_precs are manageable
-        unmanageable = groupby(lambda prec: prec.is_unmanageable, unlink_precs).get(True)
-        if unmanageable:
-            raise RuntimeError("Cannot unlink unmanageable packages:%s"
-                               % dashlist(prec.record_id() for prec in unmanageable))
+        if unmanageable := groupby(
+            lambda prec: prec.is_unmanageable, unlink_precs
+        ).get(True):
+            raise RuntimeError(
+                f"Cannot unlink unmanageable packages:{dashlist((prec.record_id() for prec in unmanageable))}"
+            )
+
 
         return unlink_precs, link_precs
 
@@ -256,9 +257,7 @@ class Solver(object):
                 return IndexedSet(PrefixGraph(ssc.solution_precs).graph)
 
         if not ssc.r:
-            with Spinner("Collecting package metadata (%s)" % self._repodata_fn,
-                         (not context.verbosity and not context.quiet and not retrying),
-                         context.json):
+            with Spinner(f"Collecting package metadata ({self._repodata_fn})", (not context.verbosity and not context.quiet and not retrying), context.json):
                 ssc = self._collect_all_metadata(ssc)
 
         if should_retry_solve and update_modifier == UpdateModifier.FREEZE_INSTALLED:
@@ -322,14 +321,19 @@ class Solver(object):
                             m_dep.version is not None and \
                             (m_dep.version.exact_value or "<" in m_dep.version.spec):
                         if "," in m_dep.version.spec:
-                            constricting.extend([
-                                (prec.name, MatchSpec("%s %s" % (m_dep.name, v)))
-                                for v in m_dep.version.tup if "<" in v.spec])
+                            constricting.extend(
+                                [
+                                    (prec.name, MatchSpec(f"{m_dep.name} {v}"))
+                                    for v in m_dep.version.tup
+                                    if "<" in v.spec
+                                ]
+                            )
+
                         else:
                             constricting.append((prec.name, m_dep))
 
         hard_constricting = [i for i in constricting if i[1].version.matcher_vo <= highest_version]
-        if len(hard_constricting) == 0:
+        if not hard_constricting:
             return None
 
         print("\n\nUpdating {spec} is constricted by \n".format(spec=spec.name))
@@ -360,10 +364,7 @@ class Solver(object):
         update_constrained = set()
 
         def empty_package_list(pkg):
-            for k, v in pkg.items():
-                if len(v) == 0:
-                    return True
-            return False
+            return any(len(v) == 0 for k, v in pkg.items())
 
         if empty_package_list(pre_packages) or empty_package_list(post_packages):
             return update_constrained
@@ -395,7 +396,7 @@ class Solver(object):
         # Add virtual packages so they are taken into account by the solver
         virtual_pkg_index = {}
         _supplement_index_with_system(virtual_pkg_index)
-        virtual_pkgs = [p.name for p in virtual_pkg_index.keys()]
+        virtual_pkgs = [p.name for p in virtual_pkg_index]
         for virtual_pkgs_name in (virtual_pkgs):
             if virtual_pkgs_name not in ssc.specs_map:
                 ssc.specs_map[virtual_pkgs_name] = MatchSpec(virtual_pkgs_name)
@@ -445,18 +446,16 @@ class Solver(object):
                 # package with a feature that matches the track_feature. The
                 # `graph.remove_spec()` method handles that for us.
                 log.trace("using PrefixGraph to remove records for %s", spec)
-                removed_records = graph.remove_spec(spec)
-                if removed_records:
+                if removed_records := graph.remove_spec(spec):
                     all_removed_records.extend(removed_records)
                 else:
                     no_removed_records_specs.append(spec)
 
-            # ensure that each spec in specs_to_remove is actually associated with removed records
-            unmatched_specs_to_remove = tuple(
-                spec for spec in no_removed_records_specs
+            if unmatched_specs_to_remove := tuple(
+                spec
+                for spec in no_removed_records_specs
                 if not any(spec.match(rec) for rec in all_removed_records)
-            )
-            if unmatched_specs_to_remove:
+            ):
                 raise PackagesNotFoundError(
                     tuple(sorted(str(s) for s in unmatched_specs_to_remove))
                 )
@@ -541,11 +540,9 @@ class Solver(object):
 
         # if all package specs have overlapping package choices (satisfiable in at least one way)
         pkg_name = target_prec.name
-        no_conflict = (pkg_name not in conflict_specs and
-                       (pkg_name not in explicit_pool or
-                        target_prec in explicit_pool[pkg_name]))
-
-        return no_conflict
+        return pkg_name not in conflict_specs and (
+            pkg_name not in explicit_pool or target_prec in explicit_pool[pkg_name]
+        )
 
     def _add_specs(self, ssc):
         # For the remaining specs in specs_map, add target to each spec. `target` is a reference

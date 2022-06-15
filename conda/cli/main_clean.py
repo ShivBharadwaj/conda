@@ -20,7 +20,7 @@ def find_tarballs():
     from ..core.package_cache_data import PackageCacheData
     pkgs_dirs = defaultdict(list)
     totalsize = 0
-    part_ext = tuple(e + '.part' for e in CONDA_PACKAGE_EXTENSIONS)
+    part_ext = tuple(f'{e}.part' for e in CONDA_PACKAGE_EXTENSIONS)
     for package_cache in PackageCacheData.writable_caches(context.pkgs_dirs):
         pkgs_dir = package_cache.pkgs_dir
         if not isdir(pkgs_dir):
@@ -41,7 +41,7 @@ def rm_tarballs(args, pkgs_dirs, totalsize, verbose=True):
 
     if verbose:
         for pkgs_dir in pkgs_dirs:
-            print('Cache location: %s' % pkgs_dir)
+            print(f'Cache location: {pkgs_dir}')
 
     if not any(pkgs_dirs[i] for i in pkgs_dirs):
         if verbose:
@@ -74,10 +74,9 @@ def rm_tarballs(args, pkgs_dirs, totalsize, verbose=True):
             try:
                 if rm_rf(join(pkgs_dir, fn)):
                     if verbose:
-                        print("Removed %s" % fn)
-                else:
-                    if verbose:
-                        print("WARNING: cannot remove, file permissions: %s" % fn)
+                        print(f"Removed {fn}")
+                elif verbose:
+                    print(f"WARNING: cannot remove, file permissions: {fn}")
             except (IOError, OSError) as e:
                 if verbose:
                     print("WARNING: cannot remove, file permissions: %s\n%r" % (fn, e))
@@ -141,7 +140,7 @@ def rm_pkgs(args, pkgs_dirs, warnings, totalsize, pkgsizes, verbose=True):
     from ..utils import human_bytes
     if verbose:
         for pkgs_dir in pkgs_dirs:
-            print('Cache location: %s' % pkgs_dir)
+            print(f'Cache location: {pkgs_dir}')
             for fn, exception in warnings:
                 print(exception)
 
@@ -172,7 +171,7 @@ def rm_pkgs(args, pkgs_dirs, warnings, totalsize, pkgsizes, verbose=True):
     for pkgs_dir in pkgs_dirs:
         for pkg in pkgs_dirs[pkgs_dir]:
             if verbose:
-                print("removing %s" % pkg)
+                print(f"removing {pkg}")
             rm_rf(join(pkgs_dir, pkg))
 
 
@@ -193,8 +192,10 @@ def rm_rf_pkgs_dirs():
         pc.pkgs_dir for pc in PackageCacheData.writable_caches() if isdir(pc.pkgs_dir)
     )
     if not context.json or not context.always_yes:
-        print("Remove all contents from the following package caches?%s"
-              % dashlist(writable_pkgs_dirs))
+        print(
+            f"Remove all contents from the following package caches?{dashlist(writable_pkgs_dirs)}"
+        )
+
         confirm_yn()
 
     for pkgs_dir in writable_pkgs_dirs:
@@ -208,14 +209,16 @@ def clean_tmp_files(path=None):
         path = sys.prefix
     for root, dirs, fns in walk(path):
         for fn in fns:
-            if (fnmatch.fnmatch(fn, "*.trash") or
-                    fnmatch.fnmatch(fn, "*" + CONDA_TEMP_EXTENSION)):
+            if fnmatch.fnmatch(fn, "*.trash") or fnmatch.fnmatch(
+                fn, f"*{CONDA_TEMP_EXTENSION}"
+            ):
                 file_path = join(root, fn)
                 try:
                     unlink(file_path)
                 except EnvironmentError:
-                    log.warn("File at {} could not be cleaned up.  "
-                             "It's probably still in-use.".format(file_path))
+                    log.warn(
+                        f"File at {file_path} could not be cleaned up.  It's probably still in-use."
+                    )
 
 def _execute(args, parser):
     json_result = {

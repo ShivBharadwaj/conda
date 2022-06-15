@@ -23,26 +23,28 @@ log = getLogger(__name__)
 def file_path_is_writable(path):
     path = expand(path)
     log.trace("checking path is writable %s", path)
-    if isdir(dirname(path)):
-        path_existed = lexists(path)
-        try:
-            fh = open(path, 'a+')
-        except (IOError, OSError) as e:
-            log.debug(e)
-            return False
-        else:
-            fh.close()
-            if not path_existed:
-                rm_rf(path)
-            return True
-    else:
+    if not isdir(dirname(path)):
         # TODO: probably won't work well on Windows
         return access(path, W_OK)
+    path_existed = lexists(path)
+    try:
+        fh = open(path, 'a+')
+    except (IOError, OSError) as e:
+        log.debug(e)
+        return False
+    else:
+        fh.close()
+        if not path_existed:
+            rm_rf(path)
+        return True
 
 
 @memoize
 def hardlink_supported(source_file, dest_dir):
-    test_file = join(dest_dir, '.tmp.%s.%s' % (basename(source_file), text_type(uuid4())[:8]))
+    test_file = join(
+        dest_dir, f'.tmp.{basename(source_file)}.{text_type(uuid4())[:8]}'
+    )
+
     assert isfile(source_file), source_file
     assert isdir(dest_dir), dest_dir
     if lexists(test_file):
@@ -70,7 +72,7 @@ def softlink_supported(source_file, dest_dir):
     # On Windows, softlink creation is restricted to Administrative users by default. It can
     # optionally be enabled for non-admin users through explicit registry modification.
     log.trace("checking soft link capability for %s => %s", source_file, dest_dir)
-    test_path = join(dest_dir, '.tmp.' + basename(source_file))
+    test_path = join(dest_dir, f'.tmp.{basename(source_file)}')
     assert isfile(source_file), source_file
     assert isdir(dest_dir), dest_dir
     assert not lexists(test_path), test_path

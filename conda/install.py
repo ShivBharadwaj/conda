@@ -72,14 +72,12 @@ if on_win:  # pragma: no cover
         try:
             os.makedirs(dirname(dst))
         except OSError as exc:  # Python >2.5
-            if exc.errno == EEXIST and isdir(dirname(dst)):
-                pass
-            else:
+            if exc.errno != EEXIST or not isdir(dirname(dst)):
                 raise
 
         # bat file redirect
-        if not isfile(dst + '.bat'):
-            with open(dst + '.bat', 'w') as f:
+        if not isfile(f'{dst}.bat'):
+            with open(f'{dst}.bat', 'w') as f:
                 f.write('@echo off\ncall "%s" %%*\n' % src)
 
         # TODO: probably need one here for powershell at some point
@@ -94,7 +92,7 @@ if on_win:  # pragma: no cover
             with open(dst, "w") as f:
                 f.write("#!/usr/bin/env bash \n")
                 if src.endswith("conda"):
-                    f.write('%s "$@"' % shells[shell]['path_to'](src+".exe"))
+                    f.write('%s "$@"' % shells[shell]['path_to'](f"{src}.exe"))
                 else:
                     f.write('source %s "$@"' % shells[shell]['path_to'](src))
             # Make the new file executable
@@ -166,7 +164,11 @@ def linked(prefix, ignore_channels=False):
     """
     conda_package_types = PackageType.conda_package_types()
     ld = iteritems(linked_data(prefix, ignore_channels=ignore_channels))
-    return set(dist for dist, prefix_rec in ld if prefix_rec.package_type in conda_package_types)
+    return {
+        dist
+        for dist, prefix_rec in ld
+        if prefix_rec.package_type in conda_package_types
+    }
 
 
 # exports

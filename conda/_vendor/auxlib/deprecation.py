@@ -62,13 +62,13 @@ def deprecate_module_with_proxy(module_name, module_dict, deprecated_attributes=
         class Wrapper(object):
             def __getattr__(self, attr):
                 if depr is None or attr in depr:
-                    warnings.warn("Property %s is deprecated" % attr)
+                    warnings.warn(f"Property {attr} is deprecated")
 
                 return getattr(module, attr)
 
             def __setattr__(self, attr, value):
                 if depr is None or attr in depr:
-                    warnings.warn("Property %s is deprecated" % attr)
+                    warnings.warn(f"Property {attr} is deprecated")
                 return setattr(module, attr, value)
         return Wrapper()
 

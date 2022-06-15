@@ -37,18 +37,16 @@ def format_dict(d):
     for k, v in iteritems(d):
         if isinstance(v, Mapping):
             if v:
-                lines.append("%s:" % k)
-                lines.append(pretty_map(v))
+                lines.extend((f"{k}:", pretty_map(v)))
             else:
                 lines.append("%s: {}" % k)
         elif isiterable(v):
             if v:
-                lines.append("%s:" % k)
-                lines.append(pretty_list(v))
+                lines.extend((f"{k}:", pretty_list(v)))
             else:
-                lines.append("%s: []" % k)
+                lines.append(f"{k}: []")
         else:
-            lines.append("%s: %s" % (k, v if v is not None else "None"))
+            lines.append(f'{k}: {v if v is not None else "None"}')
     return lines
 
 
@@ -61,24 +59,26 @@ def parameter_description_builder(name):
     default_value_str = json.dumps(details['default_value'], cls=EntityEncoder)
 
     if details['parameter_type'] == 'primitive':
-        builder.append("%s (%s)" % (name, ', '.join(sorted(set(et for et in element_types)))))
+        builder.append(f"{name} ({', '.join(sorted(set(element_types)))})")
     else:
-        builder.append("%s (%s: %s)" % (name, details['parameter_type'],
-                                        ', '.join(sorted(set(et for et in element_types)))))
+        builder.append(
+            f"{name} ({details['parameter_type']}: {', '.join(sorted(set(element_types)))})"
+        )
+
 
     if aliases:
-        builder.append("  aliases: %s" % ', '.join(aliases))
+        builder.append(f"  aliases: {', '.join(aliases)}")
     if string_delimiter:
         builder.append("  env var string delimiter: '%s'" % string_delimiter)
 
-    builder.extend('  ' + line for line in wrap(details['description'], 70))
+    builder.extend(f'  {line}' for line in wrap(details['description'], 70))
 
     builder.append('')
-    builder = ['# ' + line for line in builder]
+    builder = [f'# {line}' for line in builder]
 
     builder.extend(yaml_round_trip_dump({name: json.loads(default_value_str)}).strip().split('\n'))
 
-    builder = ['# ' + line for line in builder]
+    builder = [f'# {line}' for line in builder]
     builder.append('')
     return builder
 
@@ -89,10 +89,15 @@ def describe_all_parameters():
     for category, parameter_names in iteritems(context.category_map):
         if category in skip_categories:
             continue
-        builder.append('# ######################################################')
-        builder.append('# ## {:^48} ##'.format(category))
-        builder.append('# ######################################################')
-        builder.append('')
+        builder.extend(
+            (
+                '# ######################################################',
+                '# ## {:^48} ##'.format(category),
+                '# ######################################################',
+                '',
+            )
+        )
+
         builder.extend(concat(parameter_description_builder(name)
                               for name in parameter_names))
         builder.append('')
@@ -103,7 +108,7 @@ def print_config_item(key, value):
     stdout_write = getLogger("conda.stdout").info
     if isinstance(value, (dict,)):
         for k, v in value.items():
-            print_config_item(key + "." + k, v)
+            print_config_item(f"{key}.{k}", v)
     elif isinstance(value, (bool, int, string_types)):
         stdout_write(" ".join(("--set", key, text_type(value))))
     elif isinstance(value, (list, tuple)):

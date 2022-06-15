@@ -37,14 +37,16 @@ log = getLogger(__name__)
 class PrefixDataType(type):
     """Basic caching of PrefixData instance objects."""
 
-    def __call__(cls, prefix_path, pip_interop_enabled=None):
+    def __call__(self, prefix_path, pip_interop_enabled=None):
         if prefix_path in PrefixData._cache_:
             return PrefixData._cache_[prefix_path]
         elif isinstance(prefix_path, PrefixData):
             return prefix_path
         else:
-            prefix_data_instance = super(PrefixDataType, cls).__call__(prefix_path,
-                                                                       pip_interop_enabled)
+            prefix_data_instance = super(PrefixDataType, self).__call__(
+                prefix_path, pip_interop_enabled
+            )
+
             PrefixData._cache_[prefix_path] = prefix_data_instance
             return prefix_data_instance
 
@@ -91,8 +93,11 @@ class PrefixData(object):
                 fn = fn.replace(ext, '')
                 known_ext = True
         if not known_ext:
-            raise ValueError("Attempted to make prefix record for unknown package type: %s" % fn)
-        return fn + '.json'
+            raise ValueError(
+                f"Attempted to make prefix record for unknown package type: {fn}"
+            )
+
+        return f'{fn}.json'
 
     def insert(self, prefix_record):
         assert prefix_record.name not in self._prefix_records, \
@@ -160,9 +165,8 @@ class PrefixData(object):
         if isinstance(param, MatchSpec):
             return (prefix_rec for prefix_rec in self.iter_records()
                     if param.match(prefix_rec))
-        else:
-            assert isinstance(param, PackageRecord)
-            return (prefix_rec for prefix_rec in self.iter_records() if prefix_rec == param)
+        assert isinstance(param, PackageRecord)
+        return (prefix_rec for prefix_rec in self.iter_records() if prefix_rec == param)
 
     @property
     def _prefix_records(self):
@@ -197,10 +201,7 @@ class PrefixData(object):
     def is_writable(self):
         if self.__is_writable == NULL:
             test_path = join(self.prefix_path, PREFIX_MAGIC_FILE)
-            if not isfile(test_path):
-                is_writable = None
-            else:
-                is_writable = file_path_is_writable(test_path)
+            is_writable = file_path_is_writable(test_path) if isfile(test_path) else None
             self.__is_writable = is_writable
         return self.__is_writable
 
@@ -268,8 +269,9 @@ class PrefixData(object):
                     prefix_rec.name, prefix_rec.version, prefix_rec.build
                 ))
             prefix_rec_json_path = join(
-                self.prefix_path, "conda-meta", '%s.json' % extracted_package_dir
+                self.prefix_path, "conda-meta", f'{extracted_package_dir}.json'
             )
+
             try:
                 rm_rf(prefix_rec_json_path)
             except EnvironmentError:
@@ -319,16 +321,13 @@ class PrefixData(object):
     def get_environment_env_vars(self):
         prefix_state = self._get_environment_state_file()
         env_vars_all = OrderedDict(prefix_state.get('env_vars', {}))
-        env_vars = {
-            k: v for k, v in env_vars_all.items()
-            if v != CONDA_ENV_VARS_UNSET_VAR
+        return {
+            k: v for k, v in env_vars_all.items() if v != CONDA_ENV_VARS_UNSET_VAR
         }
-        return env_vars
 
     def set_environment_env_vars(self, env_vars):
         env_state_file = self._get_environment_state_file()
-        current_env_vars = env_state_file.get('env_vars')
-        if current_env_vars:
+        if current_env_vars := env_state_file.get('env_vars'):
             current_env_vars.update(env_vars)
         else:
             env_state_file['env_vars'] = env_vars
@@ -337,8 +336,7 @@ class PrefixData(object):
 
     def unset_environment_env_vars(self, env_vars):
         env_state_file = self._get_environment_state_file()
-        current_env_vars = env_state_file.get('env_vars')
-        if current_env_vars:
+        if current_env_vars := env_state_file.get('env_vars'):
             for env_var in env_vars:
                 if env_var in current_env_vars.keys():
                     current_env_vars[env_var] = CONDA_ENV_VARS_UNSET_VAR
@@ -352,11 +350,9 @@ def get_conda_anchor_files_and_records(site_packages_short_path, python_records)
     conda_python_packages = odict()
 
     matcher = re.compile(
-        r"^%s/[^/]+(?:%s)$" % (
-            re.escape(site_packages_short_path),
-            r"|".join(re.escape(fn) for fn in anchor_file_endings)
-        )
+        f'^{re.escape(site_packages_short_path)}/[^/]+(?:{r"|".join((re.escape(fn) for fn in anchor_file_endings))})$'
     ).match
+
 
     for prefix_record in python_records:
         anchor_paths = tuple(fpath for fpath in prefix_record.files if matcher(fpath))
@@ -379,7 +375,7 @@ def get_python_version_for_prefix(prefix):
         return None
     next_record = next(py_record_iter, None)
     if next_record is not None:
-        raise CondaDependencyError("multiple python records found in prefix %s" % prefix)
+        raise CondaDependencyError(f"multiple python records found in prefix {prefix}")
     elif record.version[3].isdigit():
         return record.version[:4]
     else:
@@ -388,10 +384,14 @@ def get_python_version_for_prefix(prefix):
 
 def delete_prefix_from_linked_data(path):
     '''Here, path may be a complete prefix or a dist inside a prefix'''
-    linked_data_path = next((key for key in sorted(PrefixData._cache_, reverse=True)
-                             if path.startswith(key)),
-                            None)
-    if linked_data_path:
+    if linked_data_path := next(
+        (
+            key
+            for key in sorted(PrefixData._cache_, reverse=True)
+            if path.startswith(key)
+        ),
+        None,
+    ):
         del PrefixData._cache_[linked_data_path]
         return True
     return False

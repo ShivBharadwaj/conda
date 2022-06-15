@@ -83,11 +83,8 @@ class FTPAdapter(BaseAdapter):
         else:
             self.conn.login()
 
-        # Get the method and attempt to find the function to call.
-        resp = self.func_table[request.method](path, request)
-
         # Return the response.
-        return resp
+        return self.func_table[request.method](path, request)
 
     def close(self):
         """Dispose of any internal state."""
@@ -122,7 +119,7 @@ class FTPAdapter(BaseAdapter):
         # method. See self.list().
         data.release_conn = data.close
 
-        code = self.conn.retrbinary('RETR ' + path, data_callback_factory(data))
+        code = self.conn.retrbinary(f'RETR {path}', data_callback_factory(data))
 
         response = build_binary_response(request, data, code)
 
@@ -146,14 +143,12 @@ class FTPAdapter(BaseAdapter):
 
         # Switch directories and upload the data.
         self.conn.cwd(path)
-        code = self.conn.storbinary('STOR ' + filename, data)
+        code = self.conn.storbinary(f'STOR {filename}', data)
 
         # Close the connection and build the response.
         self.conn.close()
 
-        response = build_binary_response(request, BytesIO(), code)
-
-        return response
+        return build_binary_response(request, BytesIO(), code)
 
     def nlst(self, path, request):
         """Executes the FTP NLST command on the given path."""
@@ -178,29 +173,26 @@ class FTPAdapter(BaseAdapter):
         Basic auth to obtain the username and password. Allows the FTP adapter
         to piggyback on the basic auth notation without changing the control
         flow."""
-        auth_header = request.headers.get('Authorization')
-
-        if auth_header:
-            # The basic auth header is of the form 'Basic xyz'. We want the
-            # second part. Check that we have the right kind of auth though.
-            encoded_components = auth_header.split()[:2]
-            if encoded_components[0] != 'Basic':
-                raise AuthenticationError('Invalid form of Authentication used.')
-            else:
-                encoded = encoded_components[1]
-
-            # Decode the base64 encoded string.
-            decoded = b64decode(encoded)
-
-            # The string is of the form 'username:password'. Split on the
-            # colon.
-            components = decoded.split(':')
-            username = components[0]
-            password = components[1]
-            return (username, password)
-        else:
+        if not (auth_header := request.headers.get('Authorization')):
             # No auth header. Return None.
             return None
+        # The basic auth header is of the form 'Basic xyz'. We want the
+        # second part. Check that we have the right kind of auth though.
+        encoded_components = auth_header.split()[:2]
+        if encoded_components[0] != 'Basic':
+            raise AuthenticationError('Invalid form of Authentication used.')
+        else:
+            encoded = encoded_components[1]
+
+        # Decode the base64 encoded string.
+        decoded = b64decode(encoded)
+
+        # The string is of the form 'username:password'. Split on the
+        # colon.
+        components = decoded.split(':')
+        username = components[0]
+        password = components[1]
+        return (username, password)
 
     def get_host_and_path_from_url(self, request):
         """Given a PreparedRequest object, split the URL in such a manner as to
