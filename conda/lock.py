@@ -65,7 +65,7 @@ class FileLock(object):
         self.retries = retries
         self.lock_file_path = "%s.pid{0}.%s" % (self.path_to_lock, LOCK_EXTENSION)
         # e.g. if locking path `/conda`, lock file will be `/conda.pidXXXX.conda_lock`
-        self.lock_file_glob_str = "%s.pid*.%s" % (self.path_to_lock, LOCK_EXTENSION)
+        self.lock_file_glob_str = f"{self.path_to_lock}.pid*.{LOCK_EXTENSION}"
         assert isdir(dirname(self.path_to_lock)), "{0} doesn't exist".format(self.path_to_lock)
         assert "::" not in self.path_to_lock, self.path_to_lock
 
@@ -76,9 +76,7 @@ class FileLock(object):
 
         for _ in range(self.retries + 1):
 
-            # search, whether there is process already locked on this file
-            glob_result = glob(self.lock_file_glob_str)
-            if glob_result:
+            if glob_result := glob(self.lock_file_glob_str):
                 log.debug(LOCKSTR.format(glob_result))
                 log.debug("Sleeping for %s seconds", sleep_time)
 
@@ -114,7 +112,7 @@ class DirectoryLock(FileLock):  # lgtm [py/missing-call-to-init]
         lock_path_pre = join(self.directory_path, directory_name)
         self.lock_file_path = "%s.pid{0}.%s" % (lock_path_pre, LOCK_EXTENSION)
         # e.g. if locking directory `/conda`, lock file will be `/conda/conda.pidXXXX.conda_lock`
-        self.lock_file_glob_str = "%s.pid*.%s" % (lock_path_pre, LOCK_EXTENSION)
+        self.lock_file_glob_str = f"{lock_path_pre}.pid*.{LOCK_EXTENSION}"
         # make sure '/' exists
         assert isdir(dirname(self.directory_path)), "{0} doesn't exist".format(self.directory_path)
         if not isdir(self.directory_path):

@@ -30,7 +30,7 @@ UNLINKLINKTRANSACTION = 'UNLINKLINKTRANSACTION'
 PROGRESSIVEFETCHEXTRACT = 'PROGRESSIVEFETCHEXTRACT'
 
 
-PROGRESS_COMMANDS = set([EXTRACT, RM_EXTRACTED])
+PROGRESS_COMMANDS = {EXTRACT, RM_EXTRACTED}
 ACTION_CODES = (
     CHECK_FETCH,
     FETCH,
@@ -79,7 +79,7 @@ def check_files_in_package(source_dir, files):
         if isfile(source_file) or islink(source_file):
             return True
         else:
-            raise CondaFileIOError(source_file, "File %s does not exist in tarball" % f)
+            raise CondaFileIOError(source_file, f"File {f} does not exist in tarball")
 
 
 # Map instruction to command (a python function)

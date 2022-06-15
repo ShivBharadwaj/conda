@@ -30,15 +30,19 @@ def execute(args, parser):
                                capture_output=not no_capture_output, live_stream=args.live_stream)
     if response.rc != 0:
         log = getLogger(__name__)
-        log.error("Subprocess for 'conda run {}' command failed.  (See above for error)"
-                  .format(call))
+        log.error(
+            f"Subprocess for 'conda run {call}' command failed.  (See above for error)"
+        )
+
     if script_caller is not None:
         if 'CONDA_TEST_SAVE_TEMPS' not in os.environ:
             rm_rf(script_caller)
         else:
             log = getLogger(__name__)
-            log.warning('CONDA_TEST_SAVE_TEMPS :: retaining main_run script_caller {}'.format(
-                script_caller))
+            log.warning(
+                f'CONDA_TEST_SAVE_TEMPS :: retaining main_run script_caller {script_caller}'
+            )
+
     if not args.live_stream:
         if response.stdout:
             print(response.stdout, file=sys.stdout)

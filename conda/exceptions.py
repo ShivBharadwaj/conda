@@ -37,14 +37,17 @@ class ResolvePackageNotFound(CondaError):
         self.bad_deps = tuple(dep for deps in bad_deps for dep in deps if dep)
         formatted_chains = tuple(" -> ".join(map(str, bad_chain)) for bad_chain in bad_deps)
         self._formatted_chains = formatted_chains
-        message = '\n' + '\n'.join(('  - %s' % bad_chain) for bad_chain in formatted_chains)
+        message = '\n' + '\n'.join(
+            f'  - {bad_chain}' for bad_chain in formatted_chains
+        )
+
         super(ResolvePackageNotFound, self).__init__(message)
 NoPackagesFound = NoPackagesFoundError = ResolvePackageNotFound  # NOQA
 
 
 class LockError(CondaError):
     def __init__(self, message):
-        msg = "%s" % message
+        msg = f"{message}"
         super(LockError, self).__init__(msg)
 
 
@@ -116,7 +119,7 @@ class DeactivateHelp(Help):
 class GenericHelp(Help):
 
     def __init__(self, command):
-        message = "help requested for %s" % command
+        message = f"help requested for {command}"
         super(GenericHelp, self).__init__(message)
 
 
@@ -137,8 +140,8 @@ class TooManyArgumentsError(ArgumentError):
         self.optional_message = optional_message
 
         suffix = 's' if received - expected > 1 else ''
-        msg = ('%s Got %s argument%s (%s) but expected %s.' %
-               (optional_message, received, suffix, ', '.join(offending_arguments), expected))
+        msg = f"{optional_message} Got {received} argument{suffix} ({', '.join(offending_arguments)}) but expected {expected}."
+
         super(TooManyArgumentsError, self).__init__(msg, *args)
 
 
@@ -148,8 +151,7 @@ class TooFewArgumentsError(ArgumentError):
         self.received = received
         self.optional_message = optional_message
 
-        msg = ('%s Got %s arguments but expected %s.' %
-               (optional_message, received, expected))
+        msg = f'{optional_message} Got {received} arguments but expected {expected}.'
         super(TooFewArgumentsError, self).__init__(msg, *args)
 
 
@@ -298,8 +300,7 @@ class CommandNotFoundError(CondaError):
             from .cli.find_commands import find_commands
             message = "No command 'conda %(command)s'."
             choices = activate_commands | conda_commands | build_commands | set(find_commands())
-            close = get_close_matches(command, choices)
-            if close:
+            if close := get_close_matches(command, choices):
                 message += "\nDid you mean 'conda %s'?" % close[0]
         super(CommandNotFoundError, self).__init__(message, command=command)
 
@@ -356,7 +357,7 @@ class DirectoryNotACondaEnvironmentError(CondaError):
 
 class CondaEnvironmentError(CondaError, EnvironmentError):
     def __init__(self, message, *args):
-        msg = '%s' % message
+        msg = f'{message}'
         super(CondaEnvironmentError, self).__init__(msg, *args)
 
 
@@ -386,7 +387,7 @@ class LinkError(CondaError):
 
 class CondaOSError(CondaError, OSError):
     def __init__(self, message, **kwargs):
-        msg = '%s' % message
+        msg = f'{message}'
         super(CondaOSError, self).__init__(msg, **kwargs)
 
 
@@ -403,7 +404,7 @@ class ProxyError(CondaError):
 
 class CondaIOError(CondaError, IOError):
     def __init__(self, message, *args):
-        msg = '%s' % message
+        msg = f'{message}'
         super(CondaIOError, self).__init__(msg)
 
 
@@ -482,13 +483,13 @@ class OperationNotAllowed(CondaError):
 
 class CondaImportError(CondaError, ImportError):
     def __init__(self, message):
-        msg = '%s' % message
+        msg = f'{message}'
         super(CondaImportError, self).__init__(msg)
 
 
 class ParseError(CondaError):
     def __init__(self, message):
-        msg = '%s' % message
+        msg = f'{message}'
         super(ParseError, self).__init__(msg)
 
 
@@ -559,7 +560,7 @@ class CondaHTTPError(CondaError):
 
 class CondaRevisionError(CondaError):
     def __init__(self, message):
-        msg = "%s." % message
+        msg = f"{message}."
         super(CondaRevisionError, self).__init__(msg)
 
 
@@ -644,8 +645,8 @@ class UnsatisfiableError(CondaError):
                     cset.remove('')
                     cset.add('*')
                 if name[0] == '@':
-                    name = 'feature:' + name[1:]
-                deps.append('%s %s' % (name, '|'.join(sorted(cset))) if cset else name)
+                    name = f'feature:{name[1:]}'
+                deps.append(f"{name} {'|'.join(sorted(cset))}" if cset else name)
             chains[key] = ' -> '.join(deps)
         bad_deps = [chains[key] for key in sorted(iterkeys(chains))]
         return bad_deps
@@ -700,7 +701,7 @@ conda config --set unsatisfiable_hints True
                     _chains = []
                     if class_name == "direct":
                         msg += messages["direct"]
-                        last_dep_entry = set(d[0][-1].name for d in dep_class)
+                        last_dep_entry = {d[0][-1].name for d in dep_class}
                         dep_constraint_map = {}
                         for dep in dep_class:
                             if dep[0][-1].name in last_dep_entry:
@@ -733,13 +734,13 @@ conda config --set unsatisfiable_hints True
 
 class InstallError(CondaError):
     def __init__(self, message):
-        msg = '%s' % message
+        msg = f'{message}'
         super(InstallError, self).__init__(msg)
 
 
 class RemoveError(CondaError):
     def __init__(self, message):
-        msg = '%s' % message
+        msg = f'{message}'
         super(RemoveError, self).__init__(msg)
 
 
@@ -773,7 +774,7 @@ class SpecsConfigurationConflictError(CondaError):
 
 class CondaIndexError(CondaError, IndexError):
     def __init__(self, message):
-        msg = '%s' % message
+        msg = f'{message}'
         super(CondaIndexError, self).__init__(msg)
 
 
@@ -820,13 +821,13 @@ class CorruptedEnvironmentError(CondaError):
 
 class CondaHistoryError(CondaError):
     def __init__(self, message):
-        msg = '%s' % message
+        msg = f'{message}'
         super(CondaHistoryError, self).__init__(msg)
 
 
 class CondaUpgradeError(CondaError):
     def __init__(self, message):
-        msg = "%s" % message
+        msg = f"{message}"
         super(CondaUpgradeError, self).__init__(msg)
 
 
@@ -897,14 +898,14 @@ class NotWritableError(CondaError, OSError):
 class NoWritableEnvsDirError(CondaError):
 
     def __init__(self, envs_dirs, **kwargs):
-        message = "No writeable envs directories configured.%s" % dashlist(envs_dirs)
+        message = f"No writeable envs directories configured.{dashlist(envs_dirs)}"
         super(NoWritableEnvsDirError, self).__init__(message, envs_dirs=envs_dirs, **kwargs)
 
 
 class NoWritablePkgsDirError(CondaError):
 
     def __init__(self, pkgs_dirs, **kwargs):
-        message = "No writeable pkgs directories configured.%s" % dashlist(pkgs_dirs)
+        message = f"No writeable pkgs directories configured.{dashlist(pkgs_dirs)}"
         super(NoWritablePkgsDirError, self).__init__(message, pkgs_dirs=pkgs_dirs, **kwargs)
 
 
@@ -1083,12 +1084,8 @@ class ExceptionHandler(object):
 
     def write_out(self, content_str):
         from .base.context import context
-        if True:
-            logger = getLogger("conda.%s" % ("stdout" if context.json else "stderr"))
-            logger.info(content_str)
-        else:
-            stream = sys.stdout if context.json else sys.stderr
-            stream.write(content_str)
+        logger = getLogger(f'conda.{"stdout" if context.json else "stderr"}')
+        logger.info(content_str)
 
     @property
     def http_timeout(self):
@@ -1113,9 +1110,11 @@ class ExceptionHandler(object):
                 return self.handle_application_exception(exc_val, exc_tb)
         if isinstance(exc_val, UnicodeError) and PY2:
             return self.handle_application_exception(EncodingError(exc_val), exc_tb)
-        if isinstance(exc_val, EnvironmentError):
-            if getattr(exc_val, 'errno', None) == ENOSPC:
-                return self.handle_application_exception(NoSpaceLeftError(exc_val), exc_tb)
+        if (
+            isinstance(exc_val, EnvironmentError)
+            and getattr(exc_val, 'errno', None) == ENOSPC
+        ):
+            return self.handle_application_exception(NoSpaceLeftError(exc_val), exc_tb)
         if isinstance(exc_val, MemoryError):
             return self.handle_application_exception(CondaMemoryError(exc_val), exc_tb)
         if isinstance(exc_val, KeyboardInterrupt):
@@ -1194,30 +1193,38 @@ class ExceptionHandler(object):
             from .cli.common import stdout_json
             stdout_json(error_report)
         else:
-            message_builder = []
-            message_builder.append('')
-            message_builder.append('# >>>>>>>>>>>>>>>>>>>>>> ERROR REPORT <<<<<<<<<<<<<<<<<<<<<<')
-            message_builder.append('')
-            message_builder.extend('    ' + line
-                                   for line in error_report['traceback'].splitlines())
-            message_builder.append('')
-            message_builder.append('`$ %s`' % error_report['command'])
-            message_builder.append('')
+            message_builder = [
+                '',
+                '# >>>>>>>>>>>>>>>>>>>>>> ERROR REPORT <<<<<<<<<<<<<<<<<<<<<<',
+                '',
+            ]
+
+            message_builder.extend(
+                f'    {line}' for line in error_report['traceback'].splitlines()
+            )
+
+            message_builder.extend(('', f"`$ {error_report['command']}`", ''))
             if error_report['conda_info']:
                 from .cli.main_info import get_env_vars_str, get_main_info_str
                 try:
-                    # TODO: Sanitize env vars to remove secrets (e.g credentials for PROXY)
-                    message_builder.append(get_env_vars_str(error_report['conda_info']))
-                    message_builder.append(get_main_info_str(error_report['conda_info']))
+                    message_builder.extend(
+                        (
+                            get_env_vars_str(error_report['conda_info']),
+                            get_main_info_str(error_report['conda_info']),
+                        )
+                    )
+
                 except Exception as e:
                     log.warn("%r", e, exc_info=True)
-                    message_builder.append('conda info could not be constructed.')
-                    message_builder.append('%r' % e)
-            message_builder.append('')
-            message_builder.append(
-                "An unexpected error has occurred. Conda has prepared the above report."
+                    message_builder.extend(('conda info could not be constructed.', '%r' % e))
+            message_builder.extend(
+                (
+                    '',
+                    "An unexpected error has occurred. Conda has prepared the above report.",
+                    '',
+                )
             )
-            message_builder.append('')
+
             self.write_out('\n'.join(message_builder))
 
     def print_expected_error_report(self, error_report):
@@ -1226,12 +1233,14 @@ class ExceptionHandler(object):
             from .cli.common import stdout_json
             stdout_json(error_report)
         else:
-            message_builder = []
-            message_builder.append('')
-            message_builder.append('# >>>>>>>>>>>>>>>>>>>>>> ERROR REPORT <<<<<<<<<<<<<<<<<<<<<<')
-            message_builder.append('')
-            message_builder.append('`$ %s`' % error_report['command'])
-            message_builder.append('')
+            message_builder = [
+                '',
+                '# >>>>>>>>>>>>>>>>>>>>>> ERROR REPORT <<<<<<<<<<<<<<<<<<<<<<',
+                '',
+                f"`$ {error_report['command']}`",
+                '',
+            ]
+
             if error_report['conda_info']:
                 from .cli.main_info import get_env_vars_str, get_main_info_str
                 try:
@@ -1240,19 +1249,24 @@ class ExceptionHandler(object):
                     message_builder.append(get_main_info_str(error_report['conda_info']))
                 except Exception as e:
                     log.warn("%r", e, exc_info=True)
-                    message_builder.append('conda info could not be constructed.')
-                    message_builder.append('%r' % e)
-            message_builder.append('')
-            message_builder.append('V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V')
-            message_builder.append('')
+                    message_builder.extend(('conda info could not be constructed.', '%r' % e))
+            message_builder.extend(
+                (
+                    '',
+                    'V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V',
+                    '',
+                )
+            )
 
             message_builder.extend(error_report['error'].splitlines())
-            message_builder.append('')
-
-            message_builder.append(
-                "A reportable application error has occurred. Conda has prepared the above report."
+            message_builder.extend(
+                (
+                    '',
+                    "A reportable application error has occurred. Conda has prepared the above report.",
+                    '',
+                )
             )
-            message_builder.append('')
+
             self.write_out('\n'.join(message_builder))
 
     def _calculate_ask_do_upload(self):
@@ -1271,10 +1285,7 @@ class ExceptionHandler(object):
         elif context.report_errors is True or context.always_yes:
             ask_for_upload = False
             do_upload = True
-        elif context.json or context.quiet:
-            ask_for_upload = False
-            do_upload = not context.offline and context.always_yes
-        elif not isatty:
+        elif context.json or context.quiet or not isatty:
             ask_for_upload = False
             do_upload = not context.offline and context.always_yes
         else:
@@ -1304,8 +1315,8 @@ class ExceptionHandler(object):
         }
         _timeout = self.http_timeout
         username = getpass.getuser()
-        error_report['is_ascii'] = True if all(ord(c) < 128 for c in username) else False
-        error_report['has_spaces'] = True if " " in str(username) else False
+        error_report['is_ascii'] = all((ord(c) < 128 for c in username))
+        error_report['has_spaces'] = " " in str(username)
         data = json.dumps(error_report, sort_keys=True, cls=EntityEncoder) + '\n'
         data = data.replace(str(username), "USERNAME_REMOVED")
         response = None
@@ -1336,7 +1347,7 @@ class ExceptionHandler(object):
             else:
                 self.write_out("Upload did not complete.")
                 if response and response.status_code:
-                    self.write_out(" HTTP %s" % response.status_code)
+                    self.write_out(f" HTTP {response.status_code}")
         except Exception as e:
             log.debug("%r" % e)
 
@@ -1368,5 +1379,4 @@ class ExceptionHandler(object):
 
 def conda_exception_handler(func, *args, **kwargs):
     exception_handler = ExceptionHandler()
-    return_value = exception_handler(func, *args, **kwargs)
-    return return_value
+    return exception_handler(func, *args, **kwargs)

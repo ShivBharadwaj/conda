@@ -69,10 +69,14 @@ def execute(args, parser):
 
 
 def get_installed_version(prefix, name):
-    for info in PrefixData(prefix).iter_records():
-        if info['name'] == name:
-            return str(info['version'])
-    return None
+    return next(
+        (
+            str(info['version'])
+            for info in PrefixData(prefix).iter_records()
+            if info['name'] == name
+        ),
+        None,
+    )
 
 
 def create_info(name, version, build_number, requires_py):
@@ -102,8 +106,7 @@ def fix_shebang(tmp_dir, path):
     if not (m and 'python' in m.group()):
         return False
 
-    data = shebang_pat.sub('#!%s/bin/python' % PREFIX_PLACEHOLDER,
-                           data, count=1)
+    data = shebang_pat.sub(f'#!{PREFIX_PLACEHOLDER}/bin/python', data, count=1)
     tmp_path = join(tmp_dir, basename(path))
     with open(tmp_path, 'w') as fo:
         fo.write(data)
@@ -127,7 +130,7 @@ def _add_info_dir(t, tmp_dir, files, has_prefix, info):
                 fo.write(f + '\n')
 
     for fn in os.listdir(info_dir):
-        t.add(join(info_dir, fn), 'info/' + fn)
+        t.add(join(info_dir, fn), f'info/{fn}')
 
 
 def create_conda_pkg(prefix, files, info, tar_path, update_info=None):
@@ -157,12 +160,11 @@ def create_conda_pkg(prefix, files, info, tar_path, update_info=None):
             else:
                 h.update(link)
             if link.startswith('/'):
-                warnings.append('found symlink to absolute path: %s -> %s' %
-                                (f, link))
+                warnings.append(f'found symlink to absolute path: {f} -> {link}')
         elif isfile(path):
             h.update(open(path, 'rb').read())
             if path.endswith('.egg-link'):
-                warnings.append('found egg link: %s' % f)
+                warnings.append(f'found egg link: {f}')
 
     info['file_hash'] = h.hexdigest()
     if update_info:
@@ -207,7 +209,7 @@ def which_package(path):
     prefix = which_prefix(path)
     if prefix is None:
         from ..exceptions import CondaVerificationError
-        raise CondaVerificationError("could not determine conda prefix from: %s" % path)
+        raise CondaVerificationError(f"could not determine conda prefix from: {path}")
 
     for prec in PrefixData(prefix).iter_records():
         if any(paths_equal(join(prefix, f), path) for f in prec['files'] or ()):

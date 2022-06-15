@@ -47,7 +47,7 @@ def print_dists(dists_extras):
     print(fmt % ('package', 'build'))
     print(fmt % ('-' * 27, '-' * 17))
     for prec, extra in dists_extras:
-        line = fmt % (prec.name + '-' + prec.version, prec.build)
+        line = fmt % (f'{prec.name}-{prec.version}', prec.build)
         if extra:
             line += extra
         print(line)
@@ -213,8 +213,12 @@ def display_actions(actions, index, show_channel_urls=None, specs_to_remove=(), 
 
     def format(s, pkg):
         chans = [channel_filt(c) for c in channels[pkg]]
-        return lead + s.format(pkg=pkg + ':', vers=packages[pkg],
-                               channels=chans, features=features[pkg])
+        return lead + s.format(
+            pkg=f'{pkg}:',
+            vers=packages[pkg],
+            channels=chans,
+            features=features[pkg],
+        )
 
     if new:
         print("\nThe following NEW packages will be INSTALLED:\n")
@@ -309,8 +313,7 @@ def revert_actions(prefix, revision=-1, index=None):
     final_precs = IndexedSet(PrefixGraph(link_precs).graph)  # toposort
     unlink_precs, link_precs = diff_for_unlink_link_precs(prefix, final_precs)
     stp = PrefixSetup(prefix, unlink_precs, link_precs, (), user_requested_specs, ())
-    txn = UnlinkLinkTransaction(stp)
-    return txn
+    return UnlinkLinkTransaction(stp)
 
 
 # ---------------------------- Backwards compat for conda-build --------------------------
@@ -331,17 +334,10 @@ def _plan_from_actions(actions, index):  # pragma: no cover
 
     assert PREFIX in actions and actions[PREFIX]
     prefix = actions[PREFIX]
-    plan = [('PREFIX', '%s' % prefix)]
+    plan = [('PREFIX', f'{prefix}')]
 
-    unlink_link_transaction = actions.get('UNLINKLINKTRANSACTION')
-    if unlink_link_transaction:
+    if unlink_link_transaction := actions.get('UNLINKLINKTRANSACTION'):
         raise RuntimeError()
-        # progressive_fetch_extract = actions.get('PROGRESSIVEFETCHEXTRACT')
-        # if progressive_fetch_extract:
-        #     plan.append((PROGRESSIVEFETCHEXTRACT, progressive_fetch_extract))
-        # plan.append((UNLINKLINKTRANSACTION, unlink_link_transaction))
-        # return plan
-
     axn = actions.get('ACTION') or None
     specs = actions.get('SPECS', [])
 
@@ -354,9 +350,9 @@ def _plan_from_actions(actions, index):  # pragma: no cover
             log.trace("action {0} has None value".format(op))
             continue
         if '_' not in op:
-            plan.append((PRINT, '%sing packages ...' % op.capitalize()))
+            plan.append((PRINT, f'{op.capitalize()}ing packages ...'))
         elif op.startswith('RM_'):
-            plan.append((PRINT, 'Pruning %s packages from the cache ...' % op[3:].lower()))
+            plan.append((PRINT, f'Pruning {op[3:].lower()} packages from the cache ...'))
         if op in PROGRESS_COMMANDS:
             plan.append((PROGRESS, '%d' % len(actions[op])))
         for arg in actions[op]:
@@ -383,13 +379,7 @@ def _inject_UNLINKLINKTRANSACTION(plan, index, prefix, axn, specs):  # pragma: n
         link_dists = tuple(Dist(d[1]) for d in grouped_instructions.get(LINK, ()))
         unlink_dists, link_dists = _handle_menuinst(unlink_dists, link_dists)
 
-        if isdir(prefix):
-            unlink_precs = tuple(index[d] for d in unlink_dists)
-        else:
-            # there's nothing to unlink in an environment that doesn't exist
-            # this is a hack for what appears to be a logic error in conda-build
-            # caught in tests/test_subpackages.py::test_subpackage_recipes[python_test_dep]
-            unlink_precs = ()
+        unlink_precs = tuple(index[d] for d in unlink_dists) if isdir(prefix) else ()
         link_precs = tuple(index[d] for d in link_dists)
 
         pfe = ProgressiveFetchExtract(link_precs)
@@ -440,9 +430,9 @@ def install_actions(prefix, index, specs, force=False, only_names=None, always_c
                     minimal_hint=False):  # pragma: no cover
     # this is for conda-build
     with env_vars({
-        'CONDA_ALLOW_NON_CHANNEL_URLS': 'true',
-        'CONDA_SOLVER_IGNORE_TIMESTAMPS': 'false',
-    }, stack_callback=stack_context_default):
+            'CONDA_ALLOW_NON_CHANNEL_URLS': 'true',
+            'CONDA_SOLVER_IGNORE_TIMESTAMPS': 'false',
+        }, stack_callback=stack_context_default):
         from os.path import basename
         from ._vendor.boltons.setutils import IndexedSet
         from .core.solve import Solver
@@ -452,16 +442,14 @@ def install_actions(prefix, index, specs, force=False, only_names=None, always_c
             channel_names = IndexedSet(Channel(url).canonical_name for url in channel_priority_map)
             channels = IndexedSet(Channel(cn) for cn in channel_names)
             subdirs = IndexedSet(basename(url) for url in channel_priority_map)
+        elif LAST_CHANNEL_URLS:
+            channel_priority_map = prioritize_channels(LAST_CHANNEL_URLS)
+            channels = IndexedSet(Channel(url) for url in channel_priority_map)
+            subdirs = IndexedSet(
+                subdir for subdir in (c.subdir for c in channels) if subdir
+            ) or context.subdirs
         else:
-            # a hack for when conda-build calls this function without giving channel_priority_map
-            if LAST_CHANNEL_URLS:
-                channel_priority_map = prioritize_channels(LAST_CHANNEL_URLS)
-                channels = IndexedSet(Channel(url) for url in channel_priority_map)
-                subdirs = IndexedSet(
-                    subdir for subdir in (c.subdir for c in channels) if subdir
-                ) or context.subdirs
-            else:
-                channels = subdirs = None
+            channels = subdirs = None
 
         specs = tuple(MatchSpec(spec) for spec in specs)
 

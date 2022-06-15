@@ -92,7 +92,7 @@ class PathAction(object):
     def __repr__(self):
         args = ('%s=%r' % (key, value) for key, value in iteritems(vars(self))
                 if key not in REPR_IGNORE_KWARGS)
-        return "%s(%s)" % (self.__class__.__name__, ', '.join(args))
+        return f"{self.__class__.__name__}({', '.join(args)})"
 
 
 @with_metaclass(ABCMeta)
@@ -130,7 +130,7 @@ class MultiPathAction(object):
     def __repr__(self):
         args = ('%s=%r' % (key, value) for key, value in iteritems(vars(self))
                 if key not in REPR_IGNORE_KWARGS)
-        return "%s(%s)" % (self.__class__.__name__, ', '.join(args))
+        return f"{self.__class__.__name__}({', '.join(args)})"
 
 
 @with_metaclass(ABCMeta)
@@ -190,16 +190,17 @@ class LinkPathAction(CreateInPrefixPathAction):
     def create_file_link_actions(cls, transaction_context, package_info, target_prefix,
                                  requested_link_type):
         def get_prefix_replace(source_path_data):
-            if source_path_data.path_type == PathType.softlink:
+            if (
+                source_path_data.path_type == PathType.softlink
+                or not source_path_data.prefix_placeholder
+                and source_path_data.no_link
+            ):
                 link_type = LinkType.copy
                 prefix_placehoder, file_mode = '', None
             elif source_path_data.prefix_placeholder:
                 link_type = LinkType.copy
                 prefix_placehoder = source_path_data.prefix_placeholder
                 file_mode = source_path_data.file_mode
-            elif source_path_data.no_link:
-                link_type = LinkType.copy
-                prefix_placehoder, file_mode = '', None
             else:
                 link_type = requested_link_type
                 prefix_placehoder, file_mode = '', None
@@ -261,7 +262,7 @@ class LinkPathAction(CreateInPrefixPathAction):
         source_directory = context.conda_prefix
         source_short_path = 'Scripts/conda.exe'
         command, _, _ = parse_entry_point_def(entry_point_def)
-        target_short_path = "Scripts/%s.exe" % command
+        target_short_path = f"Scripts/{command}.exe"
         source_path_data = PathDataV1(
             _path=target_short_path,
             path_type=PathType.windows_python_entry_point_exe,
@@ -401,8 +402,7 @@ class PrefixReplaceLinkAction(LinkPathAction):
         self.intermediate_path = None
 
     def verify(self):
-        validation_error = super(PrefixReplaceLinkAction, self).verify()
-        if validation_error:
+        if validation_error := super(PrefixReplaceLinkAction, self).verify():
             return validation_error
 
         if islink(self.source_full_path):
@@ -602,7 +602,7 @@ class CreatePythonEntryPointAction(CreateInPrefixPathAction):
         if noarch is not None and noarch.type == NoarchType.python:
             def this_triplet(entry_point_def):
                 command, module, func = parse_entry_point_def(entry_point_def)
-                target_short_path = "%s/%s" % (get_bin_directory_short_path(), command)
+                target_short_path = f"{get_bin_directory_short_path()}/{command}"
                 if on_win:
                     target_short_path += "-script.py"
                 return target_short_path, module, func
@@ -837,7 +837,7 @@ class CreatePrefixRecordAction(CreateInPrefixPathAction):
                        requested_spec, all_link_path_actions):
 
         extracted_package_dir = package_info.extracted_package_dir
-        target_short_path = 'conda-meta/%s.json' % basename(extracted_package_dir)
+        target_short_path = f'conda-meta/{basename(extracted_package_dir)}.json'
         return cls(transaction_context, package_info, target_prefix, target_short_path,
                    requested_link_type, requested_spec, all_link_path_actions),
 
@@ -871,12 +871,11 @@ class CreatePrefixRecordAction(CreateInPrefixPathAction):
         def paths_from_action(link_path_action):
             if isinstance(link_path_action, CompileMultiPycAction):
                 return link_path_action.prefix_paths_data
+            if (not hasattr(link_path_action, 'prefix_path_data') or
+                    link_path_action.prefix_path_data is None):
+                return ()
             else:
-                if (not hasattr(link_path_action, 'prefix_path_data') or
-                        link_path_action.prefix_path_data is None):
-                    return ()
-                else:
-                    return (link_path_action.prefix_path_data, )
+                return (link_path_action.prefix_path_data, )
 
         files = list(concat(files_from_action(x) for x in self.all_link_path_actions if x))
         paths_data = PathsData(
@@ -1164,11 +1163,9 @@ class CacheUrlAction(PathAction):
             #   anyway when we extract the tarball.
             source_md5sum = compute_md5sum(source_path)
             exclude_caches = self.target_pkgs_dir,
-            pc_entry = PackageCacheData.tarball_file_in_cache(
+            if pc_entry := PackageCacheData.tarball_file_in_cache(
                 source_path, source_md5sum, exclude_caches=exclude_caches
-            )
-
-            if pc_entry:
+            ):
                 origin_url = target_package_cache._urls_data.get_url(
                     pc_entry.extracted_package_dir
                 )
@@ -1246,7 +1243,7 @@ class ExtractPackageAction(PathAction):
 
         try:
             raw_index_json = read_index_json(self.target_full_path)
-        except (IOError, OSError, JSONDecodeError, FileNotFoundError):
+        except (IOError, OSError):
             # At this point, we can assume the package tarball is bad.
             # Remove everything and move on.
             print("ERROR: Encountered corrupt package tarball at %s. Conda has "

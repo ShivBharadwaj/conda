@@ -49,13 +49,13 @@ class PackageCacheType(type):
     This metaclass does basic caching of PackageCache instance objects.
     """
 
-    def __call__(cls, pkgs_dir):
+    def __call__(self, pkgs_dir):
         if isinstance(pkgs_dir, PackageCacheData):
             return pkgs_dir
         elif pkgs_dir in PackageCacheData._cache_:
             return PackageCacheData._cache_[pkgs_dir]
         else:
-            package_cache_instance = super(PackageCacheType, cls).__call__(pkgs_dir)
+            package_cache_instance = super(PackageCacheType, self).__call__(pkgs_dir)
             PackageCacheData._cache_[pkgs_dir] = package_cache_instance
             return package_cache_instance
 
@@ -93,8 +93,7 @@ class PackageCacheData(object):
                 continue
             elif (isdir(full_path) and isfile(join(full_path, 'info', 'index.json'))
                   or isfile(full_path) and full_path.endswith(_CONDA_TARBALL_EXTENSIONS)):
-                package_cache_record = self._make_single_record(base_name)
-                if package_cache_record:
+                if package_cache_record := self._make_single_record(base_name):
                     _package_cache_records[package_cache_record] = package_cache_record
 
     def reload(self):
@@ -125,9 +124,8 @@ class PackageCacheData(object):
         if isinstance(param, MatchSpec):
             return (pcrec for pcrec in itervalues(self._package_cache_records)
                     if param.match(pcrec))
-        else:
-            assert isinstance(param, PackageRecord)
-            return (pcrec for pcrec in itervalues(self._package_cache_records) if pcrec == param)
+        assert isinstance(param, PackageRecord)
+        return (pcrec for pcrec in itervalues(self._package_cache_records) if pcrec == param)
 
     def iter_records(self):
         return iter(self._package_cache_records)
@@ -156,9 +154,9 @@ class PackageCacheData(object):
             if i_wri is True:
                 return package_cache
             elif i_wri is None:
-                # means package cache directory doesn't exist, need to try to create it
-                created = create_package_cache_directory(package_cache.pkgs_dir)
-                if created:
+                if created := create_package_cache_directory(
+                    package_cache.pkgs_dir
+                ):
                     package_cache.__is_writable = True
                     return package_cache
 
@@ -168,17 +166,17 @@ class PackageCacheData(object):
     def writable_caches(cls, pkgs_dirs=None):
         if pkgs_dirs is None:
             pkgs_dirs = context.pkgs_dirs
-        writable_caches = tuple(filter(lambda c: c.is_writable,
-                                       (cls(pd) for pd in pkgs_dirs)))
-        return writable_caches
+        return tuple(
+            filter(lambda c: c.is_writable, (cls(pd) for pd in pkgs_dirs))
+        )
 
     @classmethod
     def read_only_caches(cls, pkgs_dirs=None):
         if pkgs_dirs is None:
             pkgs_dirs = context.pkgs_dirs
-        read_only_caches = tuple(filter(lambda c: not c.is_writable,
-                                        (cls(pd) for pd in pkgs_dirs)))
-        return read_only_caches
+        return tuple(
+            filter(lambda c: not c.is_writable, (cls(pd) for pd in pkgs_dirs))
+        )
 
     @classmethod
     def all_caches_writable_first(cls, pkgs_dirs=None):
@@ -219,10 +217,11 @@ class PackageCacheData(object):
     @classmethod
     def tarball_file_in_cache(cls, tarball_path, md5sum=None, exclude_caches=()):
         tarball_full_path, md5sum = cls._clean_tarball_path_and_get_md5sum(tarball_path, md5sum)
-        pc_entry = first(cls(pkgs_dir).tarball_file_in_this_cache(tarball_full_path, md5sum)
-                         for pkgs_dir in context.pkgs_dirs
-                         if pkgs_dir not in exclude_caches)
-        return pc_entry
+        return first(
+            cls(pkgs_dir).tarball_file_in_this_cache(tarball_full_path, md5sum)
+            for pkgs_dir in context.pkgs_dirs
+            if pkgs_dir not in exclude_caches
+        )
 
     @classmethod
     def clear(cls):
@@ -231,11 +230,11 @@ class PackageCacheData(object):
     def tarball_file_in_this_cache(self, tarball_path, md5sum=None):
         tarball_full_path, md5sum = self._clean_tarball_path_and_get_md5sum(tarball_path, md5sum)
         tarball_basename = basename(tarball_full_path)
-        pc_entry = first(
-            (pc_entry for pc_entry in itervalues(self)),
-            key=lambda pce: pce.tarball_basename == tarball_basename and pce.md5 == md5sum
+        return first(
+            iter(itervalues(self)),
+            key=lambda pce: pce.tarball_basename == tarball_basename
+            and pce.md5 == md5sum,
         )
-        return pc_entry
 
     @property
     def _package_cache_records(self):
@@ -286,7 +285,7 @@ class PackageCacheData(object):
 
     def __repr__(self):
         args = ('%s=%r' % (key, getattr(self, key)) for key in ('pkgs_dir',))
-        return "%s(%s)" % (self.__class__.__name__, ', '.join(args))
+        return f"{self.__class__.__name__}({', '.join(args)})"
 
     def _make_single_record(self, package_filename):
         # delay-load this to help make sure libarchive can be found
@@ -305,7 +304,7 @@ class PackageCacheData(object):
                 extracted_package_dir=extracted_package_dir,
             )
             return package_cache_record
-        except (EnvironmentError, JSONDecodeError, ValueError, FileNotFoundError) as e:
+        except (EnvironmentError, ValueError, FileNotFoundError) as e:
             # EnvironmentError if info/repodata_record.json doesn't exists
             # JsonDecodeError if info/repodata_record.json is partially extracted or corrupted
             #   python 2.7 raises ValueError instead of JsonDecodeError
@@ -316,7 +315,7 @@ class PackageCacheData(object):
             # try reading info/index.json
             try:
                 raw_json_record = read_index_json(extracted_package_dir)
-            except (EnvironmentError, JSONDecodeError, ValueError, FileNotFoundError) as e:
+            except (EnvironmentError, ValueError, FileNotFoundError) as e:
                 # EnvironmentError if info/index.json doesn't exist
                 # JsonDecodeError if info/index.json is partially extracted or corrupted
                 #   python 2.7 raises ValueError instead of JsonDecodeError
@@ -349,7 +348,7 @@ class PackageCacheData(object):
                                 return None
                         try:
                             raw_json_record = read_index_json(extracted_package_dir)
-                        except (IOError, OSError, JSONDecodeError, FileNotFoundError):
+                        except (IOError, OSError):
                             # At this point, we can assume the package tarball is bad.
                             # Remove everything and move on.
                             rm_rf(package_tarball_full_path)
@@ -646,8 +645,7 @@ class ProgressiveFetchExtract(object):
         exceptions = []
         with signal_handler(conda_signal_handler), time_recorder("fetch_extract_execute"):
             for prec_or_spec, prec_actions in iteritems(self.paired_actions):
-                exc = self._execute_actions(prec_or_spec, prec_actions)
-                if exc:
+                if exc := self._execute_actions(prec_or_spec, prec_actions):
                     log.debug('%r'.encode('utf-8'), exc, exc_info=True)
                     exceptions.append(exc)
 

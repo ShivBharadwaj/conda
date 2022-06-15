@@ -266,25 +266,24 @@ def quote_for_shell(arguments, shell=None):
         shell = 'cmd.exe' if on_win else 'bash'
     if shell == 'cmd.exe':
         return list2cmdline(arguments)
-    else:
-        # If any multiline argument gets mixed with any other argument (which is true if we've
-        # arrived in this function) then we just quote it. This assumes something like:
-        # ['python', '-c', 'a\nmultiline\nprogram\n']
-        # It may make sense to allow specifying a replacement character for '\n' too? e.g. ';'
-        quoted = []
+    # If any multiline argument gets mixed with any other argument (which is true if we've
+    # arrived in this function) then we just quote it. This assumes something like:
+    # ['python', '-c', 'a\nmultiline\nprogram\n']
+    # It may make sense to allow specifying a replacement character for '\n' too? e.g. ';'
+    quoted = []
         # This could all be replaced with some regex wizardry but that is less readable and
         # for code like this, readability is very important.
-        for arg in arguments:
-            if '"' in arg:
-                quote = "'"
-            elif "'" in arg:
-                quote = '"'
-            elif not any(_ in arg for _ in (' ', '\n')):
-                quote = ''
-            else:
-                quote = '"'
-            quoted.append(quote + arg + quote)
-        return ' '.join(quoted)
+    for arg in arguments:
+        if '"' in arg:
+            quote = "'"
+        elif "'" in arg:
+            quote = '"'
+        elif all(_ not in arg for _ in (' ', '\n')):
+            quote = ''
+        else:
+            quote = '"'
+        quoted.append(quote + arg + quote)
+    return ' '.join(quoted)
 
 
 # Ensures arguments are a tuple or a list. Strings are converted
@@ -314,7 +313,10 @@ def massage_arguments(arguments, errors='assert'):
     if not isiterable(arguments):
         arguments = (arguments,)
 
-    assert not any([isiterable(arg) for arg in arguments]), "Individual arguments must not be iterable"  # NOQA
+    assert not any(
+        isiterable(arg) for arg in arguments
+    ), "Individual arguments must not be iterable"
+
     arguments = list(arguments)
 
     return arguments
@@ -326,11 +328,9 @@ def wrap_subprocess_call(on_win, root_prefix, prefix, dev_mode, debug_wrapper_sc
     arguments = massage_arguments(arguments)
     tmp_prefix = abspath(join(prefix, '.tmp'))
     script_caller = None
-    multiline = False
-    if len(arguments) == 1 and '\n' in arguments[0]:
-        multiline = True
+    multiline = len(arguments) == 1 and '\n' in arguments[0]
     if on_win:
-        comspec = environ[str('COMSPEC')]
+        comspec = environ['COMSPEC']
         if dev_mode:
             from conda import CONDA_PACKAGE_ROOT
             conda_bat = join(CONDA_PACKAGE_ROOT, 'shell', 'condabin', 'conda.bat')
@@ -338,23 +338,26 @@ def wrap_subprocess_call(on_win, root_prefix, prefix, dev_mode, debug_wrapper_sc
             conda_bat = environ.get("CONDA_BAT",
                                     abspath(join(root_prefix, 'condabin', 'conda.bat')))
         with Utf8NamedTemporaryFile(mode='w', prefix=tmp_prefix,
-                                    suffix='.bat', delete=False) as fh:
+                                            suffix='.bat', delete=False) as fh:
             silencer = "" if debug_wrapper_scripts else "@"
-            fh.write("{}ECHO OFF\n".format(silencer))
-            fh.write("{}SET PYTHONIOENCODING=utf-8\n".format(silencer))
-            fh.write("{}SET PYTHONUTF8=1\n".format(silencer))
-            fh.write('{}FOR /F "tokens=2 delims=:." %%A in (\'chcp\') do for %%B in (%%A) do set "_CONDA_OLD_CHCP=%%B"\n'.format(silencer))  # NOQA
-            fh.write("{}chcp 65001 > NUL\n".format(silencer))
+            fh.write(f"{silencer}ECHO OFF\n")
+            fh.write(f"{silencer}SET PYTHONIOENCODING=utf-8\n")
+            fh.write(f"{silencer}SET PYTHONUTF8=1\n")
+            fh.write(
+                f"""{silencer}FOR /F "tokens=2 delims=:." %%A in (\'chcp\') do for %%B in (%%A) do set "_CONDA_OLD_CHCP=%%B"\n"""
+            )
+
+            fh.write(f"{silencer}chcp 65001 > NUL\n")
             if dev_mode:
                 from conda.core.initialize import CONDA_PACKAGE_ROOT
-                fh.write("{}SET CONDA_DEV=1\n".format(silencer))
+                fh.write(f"{silencer}SET CONDA_DEV=1\n")
                 # In dev mode, conda is really:
                 # 'python -m conda'
                 # *with* PYTHONPATH set.
-                fh.write("{}SET PYTHONPATH={}\n".format(silencer, dirname(CONDA_PACKAGE_ROOT)))
-                fh.write("{}SET CONDA_EXE={}\n".format(silencer, sys.executable))
-                fh.write("{}SET _CE_M=-m\n".format(silencer))
-                fh.write("{}SET _CE_CONDA=conda\n".format(silencer))
+                fh.write(f"{silencer}SET PYTHONPATH={dirname(CONDA_PACKAGE_ROOT)}\n")
+                fh.write(f"{silencer}SET CONDA_EXE={sys.executable}\n")
+                fh.write(f"{silencer}SET _CE_M=-m\n")
+                fh.write(f"{silencer}SET _CE_CONDA=conda\n")
             if debug_wrapper_scripts:
                 fh.write('echo *** environment before *** 1>&2\n')
                 fh.write('SET 1>&2\n')
@@ -363,7 +366,7 @@ def wrap_subprocess_call(on_win, root_prefix, prefix, dev_mode, debug_wrapper_sc
             # fh.write("@FOR /F \"tokens=100\" %%F IN ('chcp') DO @SET CONDA_OLD_CHCP=%%F\n")
             # fh.write('@chcp 65001>NUL\n')
             fh.write('{0}CALL \"{1}\" activate \"{2}\"\n'.format(silencer, conda_bat, prefix))
-            fh.write("{}IF %ERRORLEVEL% NEQ 0 EXIT /b %ERRORLEVEL%\n".format(silencer))
+            fh.write(f"{silencer}IF %ERRORLEVEL% NEQ 0 EXIT /b %ERRORLEVEL%\n")
             if debug_wrapper_scripts:
                 fh.write('echo *** environment after *** 1>&2\n')
                 fh.write('SET 1>&2\n')
@@ -372,16 +375,18 @@ def wrap_subprocess_call(on_win, root_prefix, prefix, dev_mode, debug_wrapper_sc
                 # it needs doing for each line and the caller may as well do that.
                 fh.write("{0}\n".format(arguments[0]))
             else:
-                assert not any('\n' in arg for arg in arguments), \
-                    "Support for scripts where arguments contain newlines not implemented.\n"     \
-                    ".. requires writing the script to an external file and knowing how to "      \
-                    "transform the command-line (e.g. `python -c args` => `python file`) "        \
-                    "in a tool dependent way, or attempting something like:\n"                    \
-                    ".. https://stackoverflow.com/a/15032476 (adds unacceptable escaping"         \
+                assert all('\n' not in arg for arg in arguments), (
+                    "Support for scripts where arguments contain newlines not implemented.\n"
+                    ".. requires writing the script to an external file and knowing how to "
+                    "transform the command-line (e.g. `python -c args` => `python file`) "
+                    "in a tool dependent way, or attempting something like:\n"
+                    ".. https://stackoverflow.com/a/15032476 (adds unacceptable escaping"
                     "requirements)"
+                )
+
                 fh.write("{0}{1}\n".format(silencer, quote_for_shell(arguments)))
-            fh.write("{}IF %ERRORLEVEL% NEQ 0 EXIT /b %ERRORLEVEL%\n".format(silencer))
-            fh.write('{}chcp %_CONDA_OLD_CHCP%>NUL\n'.format(silencer))
+            fh.write(f"{silencer}IF %ERRORLEVEL% NEQ 0 EXIT /b %ERRORLEVEL%\n")
+            fh.write(f'{silencer}chcp %_CONDA_OLD_CHCP%>NUL\n')
             script_caller = fh.name
         command_args = [comspec, '/d', '/c', script_caller]
     else:
@@ -403,7 +408,7 @@ def wrap_subprocess_call(on_win, root_prefix, prefix, dev_mode, debug_wrapper_sc
         with Utf8NamedTemporaryFile(mode='w', prefix=tmp_prefix, delete=False) as fh:
             if dev_mode:
                 from conda.core.initialize import CONDA_PACKAGE_ROOT
-                fh.write(">&2 export PYTHONPATH=" + dirname(CONDA_PACKAGE_ROOT) + "\n")
+                fh.write(f">&2 export PYTHONPATH={dirname(CONDA_PACKAGE_ROOT)}" + "\n")
             hook_quoted = quote_for_shell(conda_exe + ['shell.posix', 'hook'] + dev_args)
             if debug_wrapper_scripts:
                 fh.write(">&2 echo '*** environment before ***'\n"

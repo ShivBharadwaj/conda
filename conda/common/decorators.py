@@ -12,10 +12,7 @@ def env_override(envvar_name, convert_empty_to_none=False):
             value = os.environ.get(envvar_name, None)
 
             if value is not None:
-                if value == '' and convert_empty_to_none:
-                    return None
-                else:
-                    return value
+                return None if value == '' and convert_empty_to_none else value
             else:
                 return func(*args, **kwargs)
         wrapper.__name__ = func.__name__

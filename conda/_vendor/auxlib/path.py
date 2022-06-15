@@ -71,9 +71,7 @@ def open_package_file(file_path, package_name):
         log.info("found package resource file {0} for package {1}".format(file_path, package_name))
         return pkg_resources.resource_stream(package_name, file_path)
 
-    # look for file in site-packages
-    package_path = find_file_in_site_packages(file_path, package_name)
-    if package_path:
+    if package_path := find_file_in_site_packages(file_path, package_name):
         return open(package_path)  # pragma: no cover
 
     msg = "file for module [{0}] cannot be found at path {1}".format(package_name, file_path)

@@ -35,10 +35,7 @@ def cuda_detect():
 
     # open library
     import ctypes
-    if system == 'Windows':
-        dll = ctypes.windll
-    else:
-        dll = ctypes.cdll
+    dll = ctypes.windll if system == 'Windows' else ctypes.cdll
     libcuda = None
     for lib_filename in lib_filenames:
         try:

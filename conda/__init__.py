@@ -2,6 +2,7 @@
 # Copyright (C) 2012 Anaconda, Inc
 # SPDX-License-Identifier: BSD-3-Clause
 """OS-agnostic, system-level binary package manager."""
+
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
@@ -39,7 +40,7 @@ __summary__ = __doc__
 __url__ = "https://github.com/conda/conda"
 
 if os.getenv('CONDA_ROOT') is None:
-    os.environ[str('CONDA_ROOT')] = sys.prefix
+    os.environ['CONDA_ROOT'] = sys.prefix
 
 CONDA_PACKAGE_ROOT = abspath(dirname(__file__))
 
@@ -63,20 +64,21 @@ class CondaError(Exception):
 # inherit from it if they have their own __repr__ (and maybe __str__) function.
     if sys.version_info[0] > 2:
         def __repr__(self):
-            return '%s: %s' % (self.__class__.__name__, text_type(self))
+            return f'{self.__class__.__name__}: {text_type(self)}'
     else:
 
         # We must return unicode here.
         def __unicode__(self):
-            new_kwargs = dict()
-            for k, v in iteritems(self._kwargs):
-                new_kwargs[another_to_unicode(k)] = another_to_unicode(v)
+            new_kwargs = {
+                another_to_unicode(k): another_to_unicode(v)
+                for k, v in iteritems(self._kwargs)
+            }
+
             new_message = another_to_unicode(self.message)
-            res = '%s' % (new_message % new_kwargs)
-            return res
+            return f'{new_message % new_kwargs}'
 
         def __repr__(self):
-            return '%s: %s' % (self.__class__.__name__, self.__unicode__())
+            return f'{self.__class__.__name__}: {self.__unicode__()}'
 
     def __str__(self):
 
@@ -86,19 +88,22 @@ class CondaError(Exception):
             else:
                 return self.__unicode__().encode('utf-8')
         except Exception:
-            debug_message = "\n".join((
-                "class: " + self.__class__.__name__,
-                "message:",
-                self.message,
-                "kwargs:",
-                text_type(self._kwargs),
-                "",
-            ))
+            debug_message = "\n".join(
+                (
+                    f"class: {self.__class__.__name__}",
+                    "message:",
+                    self.message,
+                    "kwargs:",
+                    text_type(self._kwargs),
+                    "",
+                )
+            )
+
             print(debug_message, file=sys.stderr)
             raise
 
     def dump_map(self):
-        result = dict((k, v) for k, v in vars(self).items() if not k.startswith('_'))
+        result = {k: v for k, v in vars(self).items() if not k.startswith('_')}
         result.update(exception_type=text_type(type(self)),
                       exception_name=self.__class__.__name__,
                       message=text_type(self),
@@ -125,8 +130,7 @@ class CondaMultiError(CondaError):
                     # by using e.__repr__() instead of repr(e)
                     # https://github.com/scrapy/cssselect/issues/34
                     errs.append(e.__repr__())
-            res = '\n'.join(errs)
-            return res
+            return '\n'.join(errs)
     else:
         # We must return unicode here.
         def __unicode__(self):
@@ -139,14 +143,13 @@ class CondaMultiError(CondaError):
                     # by using e.__repr__() instead of repr(e)
                     # https://github.com/scrapy/cssselect/issues/34
                     errs.append(e.__repr__())
-            res = '\n'.join(errs)
-            return res
+            return '\n'.join(errs)
 
         def __repr__(self):
-            return '%s: %s' % (self.__class__.__name__, self.__unicode__())
+            return f'{self.__class__.__name__}: {self.__unicode__()}'
 
     def __str__(self):
-        return str('\n').join(str(e) for e in self.errors) + str('\n')
+        return '\n'.join((str(e) for e in self.errors)) + '\n'
 
     def dump_map(self):
         return dict(exception_type=text_type(type(self)),

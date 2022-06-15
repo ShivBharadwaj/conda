@@ -202,19 +202,16 @@ def captured(stdout=CaptureTarget.STRING, stderr=CaptureTarget.STRING):
             wanted = bytes
         else:
             # ignore flake8 on this because it finds an error on py3 even though it is guarded
-            if sys.version_info[0] == 2:
-                wanted = unicode  # NOQA
-            else:
-                wanted = str
-        if not isinstance(to_write, wanted):
-            if hasattr(to_write, 'decode'):
-                decoded = to_write.decode('utf-8')
-                self.old_write(decoded)
-            elif hasattr(to_write, 'encode'):
-                b = to_write.encode('utf-8')
-                self.old_write(b)
-        else:
+            wanted = unicode if sys.version_info[0] == 2 else str
+        if isinstance(to_write, wanted):
             self.old_write(to_write)
+
+        elif hasattr(to_write, 'decode'):
+            decoded = to_write.decode('utf-8')
+            self.old_write(decoded)
+        elif hasattr(to_write, 'encode'):
+            b = to_write.encode('utf-8')
+            self.old_write(b)
 
     class CapturedText(object):
         pass
@@ -413,7 +410,7 @@ class Spinner(object):
     def _start_spinning(self):
         try:
             while not self._stop_running.is_set():
-                self.fh.write(next(self.spinner_cycle) + ' ')
+                self.fh.write(f'{next(self.spinner_cycle)} ')
                 self.fh.flush()
                 sleep(0.10)
                 self.fh.write('\b' * self._indicator_length)
@@ -426,7 +423,7 @@ class Spinner(object):
     @swallow_broken_pipe
     def __enter__(self):
         if not self.json:
-            sys.stdout.write("%s: " % self.message)
+            sys.stdout.write(f"{self.message}: ")
             sys.stdout.flush()
         self.start()
 
@@ -490,12 +487,13 @@ class ProgressBar(object):
 
     @swallow_broken_pipe
     def close(self):
-        if self.enabled and self.json:
-            sys.stdout.write('{"fetch":"%s","finished":true,"maxval":1,"progress":1}\n\0'
-                             % self.description)
-            sys.stdout.flush()
-        elif self.enabled:
-            self.pbar.close()
+        if self.enabled:
+            if self.json:
+                sys.stdout.write('{"fetch":"%s","finished":true,"maxval":1,"progress":1}\n\0'
+                                 % self.description)
+                sys.stdout.flush()
+            else:
+                self.pbar.close()
 
 
 # use this for debugging, because ProcessPoolExecutor isn't pdb/ipdb friendly
@@ -561,11 +559,7 @@ class ThreadLimitedThreadPoolExecutor(ThreadPoolExecutor):
             except RuntimeError:
                 # RuntimeError: can't start new thread
                 # See https://github.com/conda/conda/issues/6624
-                if len(self._threads) > 0:
-                    # It's ok to not be able to start new threads if we already have at least
-                    # one thread alive.
-                    pass
-                else:
+                if len(self._threads) <= 0:
                     raise
             return f
 
@@ -589,10 +583,7 @@ class time_recorder(ContextDecorator):  # pragma: no cover
 
     def _set_entry_name(self, f):
         if self.entry_name is None:
-            if hasattr(f, '__qualname__'):
-                entry_name = f.__qualname__
-            else:
-                entry_name = ':' + f.__name__
+            entry_name = f.__qualname__ if hasattr(f, '__qualname__') else f':{f.__name__}'
             if self.module_name:
                 entry_name = '.'.join((self.module_name, entry_name))
             self.entry_name = entry_name

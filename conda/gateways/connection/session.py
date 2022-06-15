@@ -51,15 +51,15 @@ class CondaSessionType(type):
     and creates one Session instance per thread.
     """
 
-    def __new__(mcs, name, bases, dct):
+    def __new__(cls, name, bases, dct):
         dct['_thread_local'] = local()
-        return super(CondaSessionType, mcs).__new__(mcs, name, bases, dct)
+        return super(CondaSessionType, cls).__new__(cls, name, bases, dct)
 
-    def __call__(cls):
+    def __call__(self):
         try:
-            return cls._thread_local.session
+            return self._thread_local.session
         except AttributeError:
-            session = cls._thread_local.session = super(CondaSessionType, cls).__call__()
+            session = self._thread_local.session = super(CondaSessionType, self).__call__()
             return session
 
 

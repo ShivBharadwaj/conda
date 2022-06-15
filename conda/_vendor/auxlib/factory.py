@@ -44,36 +44,41 @@ class FactoryBase(object):
 
 class FactoryType(type):
 
-    def __init__(cls, name, bases, attr):
-        super(FactoryType, cls).__init__(name, bases, attr)
-        if 'skip_registration' in cls.__dict__ and cls.skip_registration:
+    def __init__(self, name, bases, attr):
+        super(FactoryType, self).__init__(name, bases, attr)
+        if 'skip_registration' in self.__dict__ and self.skip_registration:
             pass  # we don't even care  # pragma: no cover
-        elif cls.factory is None:
+        elif self.factory is None:
             # this must be the base implementation; add a factory object
-            cls.factory = type(cls.__name__ + 'Factory', (FactoryBase, ),
-                               {'providers': dict(), 'cache': dict()})
-            if hasattr(cls, 'gateways'):
-                cls.gateways.add(cls)
+            self.factory = type(
+                f'{self.__name__}Factory',
+                (FactoryBase,),
+                {'providers': dict(), 'cache': dict()},
+            )
+
+            if hasattr(self, 'gateways'):
+                self.gateways.add(self)
         else:
             # must be a derived object, register it as a provider in cls.factory
-            cls.factory.providers[cls.__name__] = cls
+            self.factory.providers[self.__name__] = self
 
-    def __call__(cls, *args):
-        if 'factory' in cls.__dict__:
-            if args and args[0]:
-                return cls.factory.get_instance(args[0])
-            else:
-                return cls.factory.get_instance()
-        else:
-            if not getattr(cls, 'do_cache', False):
-                return super(FactoryType, cls).__call__(*args)
-            cache_id = "{0}".format(cls.__name__)
-            try:
-                return cls.factory.cache[cache_id]
-            except KeyError:
-                instance = super(FactoryType, cls).__call__(*args)
-                cls.factory.cache[cache_id] = instance
-                return instance
+    def __call__(self, *args):
+        if 'factory' in self.__dict__:
+            return (
+                self.factory.get_instance(args[0])
+                if args and args[0]
+                else self.factory.get_instance()
+            )
+
+        if not getattr(self, 'do_cache', False):
+            return super(FactoryType, self).__call__(*args)
+        cache_id = "{0}".format(self.__name__)
+        try:
+            return self.factory.cache[cache_id]
+        except KeyError:
+            instance = super(FactoryType, self).__call__(*args)
+            self.factory.cache[cache_id] = instance
+            return instance
 
 
 @with_metaclass(FactoryType)

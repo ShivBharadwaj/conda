@@ -27,17 +27,15 @@ primitive_types = tuple(chain(string_types, integer_types, (float, complex, bool
 
 
 def isiterable(obj):
-    # and not a string
     if PY2:
         return (hasattr(obj, '__iter__')
                 and not isinstance(obj, string_types)
                 and type(obj) is not type)
-    else:
-        try:
-            from collections.abc import Iterable
-        except ImportError:
-            from collections import Iterable
-        return not isinstance(obj, string_types) and isinstance(obj, Iterable)
+    try:
+        from collections.abc import Iterable
+    except ImportError:
+        from collections import Iterable
+    return not isinstance(obj, string_types) and isinstance(obj, Iterable)
 
 
 # shlex.split() is a poor function to use for anything general purpose (like calling subprocess).
@@ -57,10 +55,7 @@ def shlex_split_unicode(to_split, posix=True):
 
 
 def utf8_writer(fp):
-    if sys.version_info[0] < 3:
-        return codecs.getwriter('utf-8')(fp)
-    else:
-        return fp
+    return codecs.getwriter('utf-8')(fp) if sys.version_info[0] < 3 else fp
 
 
 if sys.version_info[0] < 3:
@@ -75,9 +70,7 @@ else:
                                suffix=None, prefix=None, dir=None, delete=True):
         if 'CONDA_TEST_SAVE_TEMPS' in os.environ:
             delete = False
-        encoding = None
-        if not 'b' in mode:
-            encoding = 'utf-8'
+        encoding = 'utf-8' if 'b' not in mode else None
         return NamedTemporaryFile(mode=mode, buffering=buffering, encoding=encoding,
                                   newline=newline, suffix=suffix, prefix=prefix,
                                   dir=dir, delete=delete)

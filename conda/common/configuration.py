@@ -61,17 +61,19 @@ def pretty_list(iterable, padding='  '):  # TODO: move elsewhere in conda.common
     if not isiterable(iterable):
         iterable = [iterable]
     try:
-        return '\n'.join("%s- %s" % (padding, item) for item in iterable)
+        return '\n'.join(f"{padding}- {item}" for item in iterable)
     except TypeError:
         return pretty_list([iterable], padding)
 
 
 def pretty_map(dictionary, padding='  '):
-    return '\n'.join("%s%s: %s" % (padding, key, value) for key, value in iteritems(dictionary))
+    return '\n'.join(
+        f"{padding}{key}: {value}" for key, value in iteritems(dictionary)
+    )
 
 
 def expand_environment_variables(unexpanded):
-    if isinstance(unexpanded, string_types) or isinstance(unexpanded, binary_type):
+    if isinstance(unexpanded, (string_types, binary_type)):
         return expandvars(unexpanded)
     else:
         return unexpanded
@@ -158,7 +160,7 @@ class ParameterFlag(Enum):
     bottom = "bottom"
 
     def __str__(self):
-        return "%s" % self.value
+        return f"{self.value}"
 
     @classmethod
     def from_name(cls, name):
@@ -207,7 +209,7 @@ class RawParameter(object):
     @classmethod
     def make_raw_parameters(cls, source, from_map):
         if from_map:
-            return dict((key, cls(source, key, from_map[key])) for key in from_map)
+            return {key: cls(source, key, from_map[key]) for key in from_map}
         return EMPTY_MAP
 
 
@@ -245,8 +247,12 @@ class EnvRawParameter(RawParameter):
     @classmethod
     def make_raw_parameters(cls, appname):
         keystart = "{0}_".format(appname.upper())
-        raw_env = dict((k.replace(keystart, '', 1).lower(), v)
-                       for k, v in iteritems(environ) if k.startswith(keystart))
+        raw_env = {
+            k.replace(keystart, '', 1).lower(): v
+            for k, v in iteritems(environ)
+            if k.startswith(keystart)
+        }
+
         return super(EnvRawParameter, cls).make_raw_parameters(EnvRawParameter.source, raw_env)
 
 
@@ -254,16 +260,14 @@ class ArgParseRawParameter(RawParameter):
     source = 'cmd_line'
 
     def value(self, parameter_obj):
-        # note: this assumes ArgParseRawParameter will only have flat configuration of either
-        # primitive or sequential type
-        if isiterable(self._raw_value):
-            children_values = []
-            for i in range(len(self._raw_value)):
-                children_values.append(ArgParseRawParameter(
-                    self.source, self.key, self._raw_value[i]))
-            return tuple(children_values)
-        else:
+        if not isiterable(self._raw_value):
             return make_immutable(self._raw_value)
+        children_values = [
+            ArgParseRawParameter(self.source, self.key, self._raw_value[i])
+            for i in range(len(self._raw_value))
+        ]
+
+        return tuple(children_values)
 
     def keyflag(self):
         return None
@@ -287,18 +291,27 @@ class YamlRawParameter(RawParameter):
         if isinstance(self._raw_value, CommentedSeq):
             value_comments = self._get_yaml_list_comments(self._raw_value)
             self._value_flags = tuple(ParameterFlag.from_string(s) for s in value_comments)
-            children_values = []
-            for i in range(len(self._raw_value)):
-                children_values.append(YamlRawParameter(
-                    self.source, self.key, self._raw_value[i], value_comments[i]))
+            children_values = [
+                YamlRawParameter(
+                    self.source, self.key, self._raw_value[i], value_comments[i]
+                )
+                for i in range(len(self._raw_value))
+            ]
+
             self._value = tuple(children_values)
         elif isinstance(self._raw_value, CommentedMap):
             value_comments = self._get_yaml_map_comments(self._raw_value)
-            self._value_flags = dict((k, ParameterFlag.from_string(v))
-                                     for k, v in iteritems(value_comments) if v is not None)
-            children_values = {}
-            for k, v in self._raw_value.items():
-                children_values[k] = YamlRawParameter(self.source, self.key, v, value_comments[k])
+            self._value_flags = {
+                k: ParameterFlag.from_string(v)
+                for k, v in iteritems(value_comments)
+                if v is not None
+            }
+
+            children_values = {
+                k: YamlRawParameter(self.source, self.key, v, value_comments[k])
+                for k, v in self._raw_value.items()
+            }
+
             self._value = frozendict(children_values)
         elif isinstance(self._raw_value, primitive_types):
             self._value_flags = None
@@ -326,13 +339,14 @@ class YamlRawParameter(RawParameter):
     @staticmethod
     def _get_yaml_list_comments(value):
         items = value.ca.items
-        raw_comment_lines = tuple(excepts((AttributeError, IndexError, KeyError, TypeError),
-                                          lambda q: YamlRawParameter._get_yaml_list_comment_item(
-                                              items[q]),
-                                          lambda _: None  # default value on exception
-                                          )(q)
-                                  for q in range(len(value)))
-        return raw_comment_lines
+        return tuple(
+            excepts(
+                (AttributeError, IndexError, KeyError, TypeError),
+                lambda q: YamlRawParameter._get_yaml_list_comment_item(items[q]),
+                lambda _: None,  # default value on exception
+            )(q)
+            for q in range(len(value))
+        )
 
     @staticmethod
     def _get_yaml_list_comment_item(item):
@@ -345,18 +359,28 @@ class YamlRawParameter(RawParameter):
 
     @staticmethod
     def _get_yaml_map_comments(value):
-        return dict((key, excepts((AttributeError, KeyError),
-                                  lambda k: value.ca.items[k][2].value.strip() or None,
-                                  lambda _: None  # default value on exception
-                                  )(key))
-                    for key in value)
+        return {
+            key: excepts(
+                (AttributeError, KeyError),
+                lambda k: value.ca.items[k][2].value.strip() or None,
+                lambda _: None,  # default value on exception
+            )(key)
+            for key in value
+        }
 
     @classmethod
     def make_raw_parameters(cls, source, from_map):
         if from_map:
-            return dict((key, cls(source, key, from_map[key],
-                                  cls._get_yaml_key_comment(from_map, key)))
-                        for key in from_map)
+            return {
+                key: cls(
+                    source,
+                    key,
+                    from_map[key],
+                    cls._get_yaml_key_comment(from_map, key),
+                )
+                for key in from_map
+            }
+
         return EMPTY_MAP
 
     @classmethod
@@ -388,15 +412,18 @@ class DefaultValueRawParameter(RawParameter):
         super(DefaultValueRawParameter, self).__init__(source, key, raw_value)
 
         if isinstance(self._raw_value, Mapping):
-            children_values = {}
-            for k, v in self._raw_value.items():
-                children_values[k] = DefaultValueRawParameter(self.source, self.key, v)
+            children_values = {
+                k: DefaultValueRawParameter(self.source, self.key, v)
+                for k, v in self._raw_value.items()
+            }
+
             self._value = frozendict(children_values)
         elif isiterable(self._raw_value):
-            children_values = []
-            for i in range(len(self._raw_value)):
-                children_values.append(DefaultValueRawParameter(
-                    self.source, self.key, self._raw_value[i]))
+            children_values = [
+                DefaultValueRawParameter(self.source, self.key, self._raw_value[i])
+                for i in range(len(self._raw_value))
+            ]
+
             self._value = tuple(children_values)
         elif isinstance(self._raw_value, ConfigurationObject):
             self._value = self._raw_value
@@ -495,9 +522,7 @@ class LoadedParameter(object):
         self._validation = validation
 
     def __eq__(self, other):
-        if type(other) is type(self):
-            return self.value == other.value
-        return False
+        return self.value == other.value if type(other) is type(self) else False
 
     def __hash__(self):
         return hash(self.value)
@@ -575,7 +600,7 @@ class LoadedParameter(object):
             msg = text_type(e)
             if issubclass(element_type, Enum):
                 choices = ", ".join(map("'{}'".format, element_type.__members__.values()))
-                msg += "\nValid choices for {}: {}".format(self._name, choices)
+                msg += f"\nValid choices for {self._name}: {choices}"
             raise CustomValidationError(self._name, e.value, source, msg)
 
     @staticmethod
@@ -630,9 +655,7 @@ class PrimitiveLoadedParameter(LoadedParameter):
             name, value, key_flag, value_flags, validation)
 
     def __eq__(self, other):
-        if type(other) is type(self):
-            return self.value == other.value
-        return False
+        return self.value == other.value if type(other) is type(self) else False
 
     def __hash__(self):
         return hash(self.value)
@@ -946,7 +969,7 @@ class Parameter(object):
             msg = text_type(e)
             if issubclass(element_type, Enum):
                 choices = ", ".join(map("'{}'".format, element_type.__members__.values()))
-                msg += "\nValid choices for {}: {}".format(name, choices)
+                msg += f"\nValid choices for {name}: {choices}"
             raise CustomValidationError(name, e.value, source, msg)
 
 
@@ -1119,7 +1142,7 @@ class ObjectParameter(Parameter):
                 None,
                 validation=self._validation)
 
-        if not (isinstance(value, Mapping) or isinstance(value, ConfigurationObject)):
+        if not isinstance(value, (Mapping, ConfigurationObject)):
             raise InvalidTypeError(name, value, match.source, value.__class__.__name__,
                                    self._type.__name__)
 
@@ -1177,7 +1200,7 @@ class ParameterLoader(object):
         # this is an explicit method, and not a descriptor/setter
         # it's meant to be called by the Configuration metaclass
         self._name = name  # lgtm [py/mutable-descriptor]
-        _names = frozenset(x for x in chain(self.aliases, (name, )))
+        _names = frozenset(chain(self.aliases, (name, )))
         self._names = _names  # lgtm [py/mutable-descriptor]
         return name
 
@@ -1251,12 +1274,15 @@ class ParameterLoader(object):
 class ConfigurationType(type):
     """metaclass for Configuration"""
 
-    def __init__(cls, name, bases, attr):
-        super(ConfigurationType, cls).__init__(name, bases, attr)
+    def __init__(self, name, bases, attr):
+        super(ConfigurationType, self).__init__(name, bases, attr)
 
         # call _set_name for each parameter
-        cls.parameter_names = tuple(p._set_name(name) for name, p in iteritems(cls.__dict__)
-                                    if isinstance(p, ParameterLoader))
+        self.parameter_names = tuple(
+            p._set_name(name)
+            for name, p in iteritems(cls.__dict__)
+            if isinstance(p, ParameterLoader)
+        )
 
 
 @with_metaclass(ConfigurationType)
@@ -1266,7 +1292,7 @@ class Configuration(object):
         # Currently, __init__ does a **full** disk reload of all files.
         # A future improvement would be to cache files that are already loaded.
         self.raw_data = odict()
-        self._cache_ = dict()
+        self._cache_ = {}
         self._reset_callbacks = IndexedSet()
         self._validation_errors = defaultdict(list)
 
@@ -1316,7 +1342,7 @@ class Configuration(object):
         return self
 
     def _reset_cache(self):
-        self._cache_ = dict()
+        self._cache_ = {}
         for callback in self._reset_callbacks:
             callback()
         return self
@@ -1349,16 +1375,12 @@ class Configuration(object):
                 except CustomValidationError as e:
                     validation_errors.append(e)
                 else:
-                    collected_errors = loaded_parameter.collect_errors(
-                        self, typed_value, match.source)
-                    if collected_errors:
+                    if collected_errors := loaded_parameter.collect_errors(
+                        self, typed_value, match.source
+                    ):
                         validation_errors.extend(collected_errors)
                     else:
                         typed_values[match.key] = typed_value
-            else:
-                # this situation will happen if there is a multikey_error and none of the
-                # matched keys is the primary key
-                pass
         return typed_values, validation_errors
 
     def validate_all(self):
@@ -1395,7 +1417,7 @@ class Configuration(object):
     def describe_parameter(self, parameter_name):
         # TODO, in Parameter base class, rename element_type to value_type
         if parameter_name not in self.parameter_names:
-            parameter_name = '_' + parameter_name
+            parameter_name = f'_{parameter_name}'
         parameter_loader = self.__class__.__dict__[parameter_name]
         parameter = parameter_loader.type
         assert isinstance(parameter, Parameter)
@@ -1435,7 +1457,7 @@ class Configuration(object):
     def typify_parameter(self, parameter_name, value, source):
         # return a tuple with correct parameter name and typed-value
         if parameter_name not in self.parameter_names:
-            parameter_name = '_' + parameter_name
+            parameter_name = f'_{parameter_name}'
         parameter_loader = self.__class__.__dict__[parameter_name]
         parameter = parameter_loader.type
         assert isinstance(parameter, Parameter)

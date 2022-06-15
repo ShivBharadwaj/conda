@@ -73,10 +73,10 @@ def make_unlink_actions(transaction_context, target_prefix, prefix_record):
             extracted_package_dir = basename(prefix_record.link.source)
         except AttributeError:
             # for backward compatibility only
-            extracted_package_dir = '%s-%s-%s' % (prefix_record.name, prefix_record.version,
-                                                  prefix_record.build)
+            extracted_package_dir = f'{prefix_record.name}-{prefix_record.version}-{prefix_record.build}'
 
-    meta_short_path = '%s/%s' % ('conda-meta', extracted_package_dir + '.json')
+
+    meta_short_path = f'conda-meta/{extracted_package_dir}.json'
     remove_conda_meta_actions = (RemoveLinkedPackageRecordAction(transaction_context,
                                                                  prefix_record,
                                                                  target_prefix, meta_short_path),)
@@ -228,9 +228,10 @@ class UnlinkLinkTransaction(object):
             return
 
         with Spinner("Verifying transaction", not context.verbosity and not context.quiet,
-                     context.json):
-            exceptions = self._verify(self.prefix_setups, self.prefix_action_groups)
-            if exceptions:
+                         context.json):
+            if exceptions := self._verify(
+                self.prefix_setups, self.prefix_action_groups
+            ):
                 try:
                     maybe_raise(CondaMultiError(exceptions), context)
                 except:
@@ -409,8 +410,7 @@ class UnlinkLinkTransaction(object):
         for axn in all_actions:
             if axn.verified:
                 continue
-            error_result = axn.verify()
-            if error_result:
+            if error_result := axn.verify():
                 formatted_error = ''.join(format_exception_only(type(error_result), error_result))
                 log.debug("Verification error in action %s\n%s", axn, formatted_error)
                 error_results.append(error_result)
@@ -436,10 +436,13 @@ class UnlinkLinkTransaction(object):
         prefix_record_groups = prefix_action_group.prefix_record_groups
 
         lower_on_win = lambda p: p.lower() if on_win else p
-        unlink_paths = set(lower_on_win(axn.target_short_path)
-                           for grp in unlink_action_groups
-                           for axn in grp.actions
-                           if isinstance(axn, UnlinkPathAction))
+        unlink_paths = {
+            lower_on_win(axn.target_short_path)
+            for grp in unlink_action_groups
+            for axn in grp.actions
+            if isinstance(axn, UnlinkPathAction)
+        }
+
         # we can get all of the paths being linked by looking only at the
         #   CreateLinkedPackageRecordAction actions
         create_lpr_actions = (axn
@@ -465,13 +468,10 @@ class UnlinkLinkTransaction(object):
                     path = lower_on_win(path)
                     link_paths_dict[path].append(axn)
                     if path not in unlink_paths and lexists(join(target_prefix, path)):
-                        # we have a collision; at least try to figure out where it came from
-                        colliding_prefix_rec = first(
-                            (prefix_rec for prefix_rec in
-                             PrefixData(target_prefix).iter_records()),
-                            key=lambda prefix_rec: path in prefix_rec.files
-                        )
-                        if colliding_prefix_rec:
+                        if colliding_prefix_rec := first(
+                            iter(PrefixData(target_prefix).iter_records()),
+                            key=lambda prefix_rec: path in prefix_rec.files,
+                        ):
                             error_results.append(KnownPackageClobberError(
                                 path,
                                 axn.package_info.repodata_record.dist_str(),
@@ -486,13 +486,16 @@ class UnlinkLinkTransaction(object):
                             ))
 
         # Verification 2. there's only a single instance of each path
-        for path, axns in iteritems(link_paths_dict):
-            if len(axns) > 1:
-                error_results.append(SharedLinkPathClobberError(
-                    path,
-                    tuple(axn.package_info.repodata_record.dist_str() for axn in axns),
-                    context,
-                ))
+        error_results.extend(
+            SharedLinkPathClobberError(
+                path,
+                tuple(axn.package_info.repodata_record.dist_str() for axn in axns),
+                context,
+            )
+            for path, axns in iteritems(link_paths_dict)
+            if len(axns) > 1
+        )
+
         return error_results
 
     @staticmethod
@@ -581,10 +584,13 @@ class UnlinkLinkTransaction(object):
                     rm_rf(test_path)
 
     def _verify(self, prefix_setups, prefix_action_groups):
-        transaction_exceptions = tuple(
-            exc for exc in UnlinkLinkTransaction._verify_transaction_level(prefix_setups) if exc
-        )
-        if transaction_exceptions:
+        if transaction_exceptions := tuple(
+            exc
+            for exc in UnlinkLinkTransaction._verify_transaction_level(
+                prefix_setups
+            )
+            if exc
+        ):
             return transaction_exceptions
 
         exceptions = []
@@ -603,20 +609,32 @@ class UnlinkLinkTransaction(object):
         # unlink unlink_action_groups and unregister_action_groups
         unlink_actions = tuple(group for group in all_action_groups if group.type == "unlink")
         # link unlink_action_groups and register_action_groups
-        link_actions = list(group for group in all_action_groups if group.type == "link")
-        compile_actions = list(group for group in all_action_groups if group.type == "compile")
-        entry_point_actions = list(group for group in all_action_groups
-                                   if group.type == "entry_point")
-        record_actions = list(group for group in all_action_groups if group.type == "record")
-        make_menu_actions = list(group for group in all_action_groups
-                                 if group.type == "make_menus")
-        remove_menu_actions = list(group for group in all_action_groups
-                                   if group.type == "remove_menus")
+        link_actions = [group for group in all_action_groups if group.type == "link"]
+        compile_actions = [
+            group for group in all_action_groups if group.type == "compile"
+        ]
+
+        entry_point_actions = [
+            group for group in all_action_groups if group.type == "entry_point"
+        ]
+
+        record_actions = [
+            group for group in all_action_groups if group.type == "record"
+        ]
+
+        make_menu_actions = [
+            group for group in all_action_groups if group.type == "make_menus"
+        ]
+
+        remove_menu_actions = [
+            group for group in all_action_groups if group.type == "remove_menus"
+        ]
+
 
         with signal_handler(conda_signal_handler), time_recorder("unlink_link_execute"):
             exceptions = []
             with Spinner("Executing transaction", not context.verbosity and not context.quiet,
-                         context.json):
+                                 context.json):
 
                 # Execute unlink actions
                 for (group, register_group, install_side) in (
@@ -639,10 +657,13 @@ class UnlinkLinkTransaction(object):
                                    target_prefix)
 
                     # parallel block 1:
-                    for exc in self.execute_executor.map(UnlinkLinkTransaction._execute_actions,
-                                                         group):
-                        if exc:
-                            exceptions.append(exc)
+                    exceptions.extend(
+                        exc
+                        for exc in self.execute_executor.map(
+                            UnlinkLinkTransaction._execute_actions, group
+                        )
+                        if exc
+                    )
 
                     # post link scripts may employ entry points.  Do them before post-link.
                     if install_side:
@@ -653,32 +674,35 @@ class UnlinkLinkTransaction(object):
                     #    because they may depend on files in the prefix.  Additionally, run
                     #    them serially, just in case order matters (hopefully not)
                     for axngroup in group:
-                        exc = UnlinkLinkTransaction._execute_post_link_actions(axngroup)
-                        if exc:
+                        if exc := UnlinkLinkTransaction._execute_post_link_actions(
+                            axngroup
+                        ):
                             exceptions.append(exc)
 
                     # parallel block 2:
                     composite_ag = []
                     if install_side:
                         composite_ag.extend(record_actions)
-                        # consolidate compile actions into one big'un for better efficiency
-                        individual_actions = [axn for ag in compile_actions for axn in ag.actions]
-                        if individual_actions:
+                        if individual_actions := [
+                            axn for ag in compile_actions for axn in ag.actions
+                        ]:
                             composite = AggregateCompileMultiPycAction(*individual_actions)
                             composite_ag.append(ActionGroup('compile', None, [composite],
                                                             composite.target_prefix))
                     # functions return None unless there was an exception
-                    for exc in self.execute_executor.map(UnlinkLinkTransaction._execute_actions,
-                                                         composite_ag):
-                        if exc:
-                            exceptions.append(exc)
+                    exceptions.extend(
+                        exc
+                        for exc in self.execute_executor.map(
+                            UnlinkLinkTransaction._execute_actions, composite_ag
+                        )
+                        if exc
+                    )
 
                     # must do the register actions AFTER all link/unlink is done
                     register_actions = tuple(group for group in all_action_groups
                                              if group.type == register_group)
                     for axngroup in register_actions:
-                        exc = UnlinkLinkTransaction._execute_actions(axngroup)
-                        if exc:
+                        if exc := UnlinkLinkTransaction._execute_actions(axngroup):
                             exceptions.append(exc)
                     if exceptions:
                         break
@@ -693,9 +717,7 @@ class UnlinkLinkTransaction(object):
                 axngroup = e.errors[1]
 
                 action, is_unlink = (None, axngroup.type == 'unlink')
-                prec = axngroup.pkg_data
-
-                if prec:
+                if prec := axngroup.pkg_data:
                     log.error("An error occurred while %s package '%s'." % (
                             'uninstalling' if is_unlink else 'installing',
                             prec.dist_str()))
@@ -759,8 +781,7 @@ class UnlinkLinkTransaction(object):
     def _execute_post_link_actions(axngroup):
         target_prefix = axngroup.target_prefix
         is_unlink = axngroup.type == 'unlink'
-        prec = axngroup.pkg_data
-        if prec:
+        if prec := axngroup.pkg_data:
             try:
                 run_script(target_prefix, prec, 'post-unlink' if is_unlink else 'post-link',
                            activate=True)
@@ -805,21 +826,21 @@ class UnlinkLinkTransaction(object):
 
     @staticmethod
     def _get_python_version(target_prefix, pcrecs_to_unlink, packages_info_to_link):
-        # this method determines the python version that will be present at the
-        # end of the transaction
-        linking_new_python = next((package_info for package_info in packages_info_to_link
-                                   if package_info.repodata_record.name == 'python'),
-                                  None)
-        if linking_new_python:
+        if linking_new_python := next(
+            (
+                package_info
+                for package_info in packages_info_to_link
+                if package_info.repodata_record.name == 'python'
+            ),
+            None,
+        ):
             # is python being linked? we're done
             full_version = linking_new_python.repodata_record.version
             assert full_version
             log.debug("found in current transaction python version %s", full_version)
             return get_major_minor_version(full_version)
 
-        # is python already linked and not being unlinked? that's ok too
-        linked_python_version = get_python_version_for_prefix(target_prefix)
-        if linked_python_version:
+        if linked_python_version := get_python_version_for_prefix(target_prefix):
             find_python = (lnkd_pkg_data for lnkd_pkg_data in pcrecs_to_unlink
                            if lnkd_pkg_data.name == 'python')
             unlinking_this_python = next(find_python, None)
@@ -900,7 +921,7 @@ class UnlinkLinkTransaction(object):
             actions = defaultdict(list)
             if q == 0:
                 self._pfe.prepare()
-                download_urls = set(axn.url for axn in self._pfe.cache_actions)
+                download_urls = {axn.url for axn in self._pfe.cache_actions}
                 actions['FETCH'].extend(prec for prec in self._pfe.link_precs
                                         if prec.url in download_urls)
 
@@ -920,7 +941,7 @@ class UnlinkLinkTransaction(object):
     def print_transaction_summary(self):
         legacy_action_groups = self._make_legacy_action_groups()
 
-        download_urls = set(axn.url for axn in self._pfe.cache_actions)
+        download_urls = {axn.url for axn in self._pfe.cache_actions}
 
         for actions, (prefix, stp) in zip(legacy_action_groups, iteritems(self.prefix_setups)):
             change_report = self._calculate_change_report(prefix, stp.unlink_precs, stp.link_precs,
@@ -955,12 +976,10 @@ class UnlinkLinkTransaction(object):
             return s
 
         def print_dists(dists_extras):
-            lines = []
             fmt = "    %-27s|%17s"
-            lines.append(fmt % ('package', 'build'))
-            lines.append(fmt % ('-' * 27, '-' * 17))
+            lines = [fmt % ('package', 'build'), fmt % ('-' * 27, '-' * 17)]
             for prec, extra in dists_extras:
-                line = fmt % (strip_global(prec.namekey) + '-' + prec.version, prec.build)
+                line = fmt % (f'{strip_global(prec.namekey)}-{prec.version}', prec.build)
                 if extra:
                     line += extra
                 lines.append(line)
@@ -1003,27 +1022,27 @@ class UnlinkLinkTransaction(object):
                 if link_prec.channel.name is not None:
                     builder_right.append(link_prec.channel.name)
             if subdir_change:
-                builder_left.append("/" + unlink_prec.subdir)
-                builder_right.append("/" + link_prec.subdir)
+                builder_left.append(f"/{unlink_prec.subdir}")
+                builder_right.append(f"/{link_prec.subdir}")
             if (channel_change or subdir_change) and (version_change or build_change):
-                builder_left.append("::" + unlink_prec.name + "-")
-                builder_right.append("::" + link_prec.name + "-")
+                builder_left.append(f"::{unlink_prec.name}-")
+                builder_right.append(f"::{link_prec.name}-")
             if version_change or build_change:
-                builder_left.append(unlink_prec.version + "-" + unlink_prec.build)
-                builder_right.append(link_prec.version + "-" + link_prec.build)
+                builder_left.append(f"{unlink_prec.version}-{unlink_prec.build}")
+                builder_right.append(f"{link_prec.version}-{link_prec.build}")
 
             return ''.join(builder_left), ''.join(builder_right)
 
         def add_single(display_key, disp_str):
             if len(display_key) > 18:
-                display_key = display_key[:17] + "~"
+                display_key = f"{display_key[:17]}~"
             builder.append("  %-18s %s" % (display_key, disp_str))
 
         def add_double(display_key, left_str, right_str):
             if len(display_key) > 18:
-                display_key = display_key[:17] + "~"
+                display_key = f"{display_key[:17]}~"
             if len(left_str) > 38:
-                left_str = left_str[:37] + "~"
+                left_str = f"{left_str[:37]}~"
             builder.append("  %-18s %38s --> %s" % (display_key, left_str, right_str))
 
         def fmt_sig_status(prec):
@@ -1031,17 +1050,18 @@ class UnlinkLinkTransaction(object):
                 return ""
 
             status = getattr(prec, "metadata_signature_status", None)
-            if not context.extra_safety_checks or status is None:
+            if (
+                status is None
+                or status != MetadataSignatureStatus.verified
+                and status == MetadataSignatureStatus.unsigned
+            ):
                 # TODO (AV): deal with virtual packages more sensibly
-                status_str = ""
+                return ""
             elif status == MetadataSignatureStatus.verified:
                 # TODO (AV): replaced hard-coded signer name with data from key
-                status_str = " (INFO: package metadata is signed by Anaconda and trusted)"
-            elif status == MetadataSignatureStatus.unsigned:
-                status_str = ""
+                return " (INFO: package metadata is signed by Anaconda and trusted)"
             else:
-                status_str = " (WARNING: metadata signature verification failed)"
-            return status_str
+                return " (WARNING: metadata signature verification failed)"
 
         if change_report.new_precs:
             builder.append("\nThe following NEW packages will be INSTALLED:\n")
@@ -1128,11 +1148,18 @@ class UnlinkLinkTransaction(object):
             else:
                 superseded_precs[namekey] = (unlink_prec, link_prec)
 
-        fetch_precs = set(prec for prec in link_precs if prec.url in download_urls)
-        change_report = ChangeReport(prefix, specs_to_remove, specs_to_add, removed_precs,
-                                     new_precs, updated_precs, downgraded_precs, superseded_precs,
-                                     fetch_precs)
-        return change_report
+        fetch_precs = {prec for prec in link_precs if prec.url in download_urls}
+        return ChangeReport(
+            prefix,
+            specs_to_remove,
+            specs_to_add,
+            removed_precs,
+            new_precs,
+            updated_precs,
+            downgraded_precs,
+            superseded_precs,
+            fetch_precs,
+        )
 
 
 def run_script(prefix, prec, action='post-link', env_prefix=None, activate=False):
@@ -1140,9 +1167,12 @@ def run_script(prefix, prec, action='post-link', env_prefix=None, activate=False
     call the post-link (or pre-unlink) script, and return True on success,
     False on failure
     """
-    path = join(prefix,
-                'Scripts' if on_win else 'bin',
-                '.%s-%s.%s' % (prec.name, action, 'bat' if on_win else 'sh'))
+    path = join(
+        prefix,
+        'Scripts' if on_win else 'bin',
+        f".{prec.name}-{action}.{'bat' if on_win else 'sh'}",
+    )
+
     if not isfile(path):
         return True
 
@@ -1173,7 +1203,7 @@ def run_script(prefix, prec, action='post-link', env_prefix=None, activate=False
     if on_win:
         ensure_comspec_set()
         try:
-            comspec = os.environ[str('COMSPEC')]
+            comspec = os.environ['COMSPEC']
         except KeyError:
             log.info("failed to run %s for %s due to COMSPEC KeyError", action, prec.dist_str())
             return False
@@ -1210,7 +1240,7 @@ def run_script(prefix, prec, action='post-link', env_prefix=None, activate=False
                 if 'openssl' in prec.dist_str():
                     # this is a hack for conda-build string parsing in the conda_build/build.py
                     #   create_env function
-                    message = "%s failed for: %s" % (action, prec)
+                    message = f"{action} failed for: {prec}"
                 else:
                     message = dals("""
                     %s script failed for package %s
@@ -1236,8 +1266,7 @@ def run_script(prefix, prec, action='post-link', env_prefix=None, activate=False
             if 'CONDA_TEST_SAVE_TEMPS' not in os.environ:
                 rm_rf(script_caller)
             else:
-                log.warning('CONDA_TEST_SAVE_TEMPS :: retaining run_script {}'.format(
-                    script_caller))
+                log.warning(f'CONDA_TEST_SAVE_TEMPS :: retaining run_script {script_caller}')
 
 
 def messages(prefix):

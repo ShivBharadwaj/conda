@@ -196,7 +196,7 @@ def _is_utf(encoding):
         return False
     except Exception:
         try:
-            return encoding.lower().startswith('utf-') or ('U8' == encoding)
+            return encoding.lower().startswith('utf-') or encoding == 'U8'
         except Exception:
             return False
     else:
@@ -212,10 +212,7 @@ def _supports_unicode(fp):
 
 def _is_ascii(s):
     if isinstance(s, str):
-        for c in s:
-            if ord(c) > 255:
-                return False
-        return True
+        return all(ord(c) <= 255 for c in s)
     return _supports_unicode(s)
 
 
@@ -248,8 +245,7 @@ def _screen_shape_windows(fp):  # pragma: no cover
 
         h = windll.kernel32.GetStdHandle(io_handle)
         csbi = create_string_buffer(22)
-        res = windll.kernel32.GetConsoleScreenBufferInfo(h, csbi)
-        if res:
+        if res := windll.kernel32.GetConsoleScreenBufferInfo(h, csbi):
             (_bufx, _bufy, _curx, _cury, _wattr, left, top, right, bottom,
              _maxx, _maxy) = struct.unpack("hhhhHhhhhhh", csbi.raw)
             return right - left, bottom - top  # +1
@@ -258,14 +254,13 @@ def _screen_shape_windows(fp):  # pragma: no cover
     return None, None
 
 
-def _screen_shape_tput(*_):  # pragma: no cover
+def _screen_shape_tput(*_):    # pragma: no cover
     """cygwin xterm (windows)"""
     try:
         # from shlex import split as ss
         from conda._vendor.auxlib.compat import shlex_split_unicode as ss
         from subprocess import check_call  # nosec
-        return [int(check_call(ss('tput ' + i))) - 1
-                for i in ('cols', 'lines')]
+        return [int(check_call(ss(f'tput {i}'))) - 1 for i in ('cols', 'lines')]
     except Exception:  # nosec
         pass
     return None, None

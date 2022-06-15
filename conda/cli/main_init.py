@@ -18,19 +18,16 @@ def execute(args, parser):
     if args.install:
         return install(context.conda_prefix)
 
-    invalid_shells = tuple(s for s in args.shells if s not in COMPATIBLE_SHELLS)
-    if invalid_shells:
+    if invalid_shells := tuple(
+        s for s in args.shells if s not in COMPATIBLE_SHELLS
+    ):
         from ..exceptions import ArgumentError
         from ..common.io import dashlist
         raise ArgumentError("Invalid shells: %s\n\n"
                             "Currently available shells are:%s"
                             % (dashlist(invalid_shells), dashlist(sorted(COMPATIBLE_SHELLS))))
 
-    if args.all:
-        selected_shells = COMPATIBLE_SHELLS
-    else:
-        selected_shells = tuple(args.shells)
-
+    selected_shells = COMPATIBLE_SHELLS if args.all else tuple(args.shells)
     if not selected_shells:
         selected_shells = ('cmd.exe', 'powershell') if on_win else ('bash',)
 

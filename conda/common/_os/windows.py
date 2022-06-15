@@ -170,8 +170,7 @@ def run_as_admin(args, wait=True):
     except Exception as e:
         successful = False
         error_code = e
-        log.info('%r', e)
-
+        log.info('%r', error_code)
     if not successful:
         error_code = WinError()
     elif wait:

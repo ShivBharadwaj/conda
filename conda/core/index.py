@@ -35,7 +35,10 @@ def check_whitelist(channel_urls):
         ))
         for url in channel_urls:
             these_urls = Channel(url).base_urls
-            if not all(this_url in whitelist_channel_urls for this_url in these_urls):
+            if any(
+                this_url not in whitelist_channel_urls
+                for this_url in these_urls
+            ):
                 raise ChannelNotAllowed(Channel(url))
 
 
@@ -75,12 +78,12 @@ def get_index(channel_urls=(), prepend=True, platform=None,
 
 
 def fetch_index(channel_urls, use_cache=False, index=None, repodata_fn=context.repodata_fns[-1]):
-    log.debug('channel_urls=' + repr(channel_urls))
+    log.debug(f'channel_urls={repr(channel_urls)}')
     index = {}
     with ThreadLimitedThreadPoolExecutor() as executor:
         subdir_instantiator = lambda url: SubdirData(Channel(url), repodata_fn=repodata_fn)
         for f in executor.map(subdir_instantiator, channel_urls):
-            index.update((rec, rec) for rec in f.iter_records())
+            index |= ((rec, rec) for rec in f.iter_records())
     return index
 
 
@@ -164,9 +167,7 @@ def _supplement_index_with_system(index):
     dist_name, dist_version = context.os_distribution_name_version
     is_osx = context.subdir.startswith("osx-")
     if is_osx:
-        # User will have to set env variable when using CONDA_SUBDIR var
-        dist_version = os.environ.get('CONDA_OVERRIDE_OSX', dist_version)
-        if dist_version:
+        if dist_version := os.environ.get('CONDA_OVERRIDE_OSX', dist_version):
             rec = _make_virtual_package('__osx', dist_version)
             index[rec] = rec
 
@@ -187,9 +188,10 @@ def _supplement_index_with_system(index):
         if not (libc_family and libc_version):
             # Default to glibc when using CONDA_SUBDIR var
             libc_family = "glibc"
-        libc_version = os.getenv("CONDA_OVERRIDE_{}".format(libc_family.upper()), libc_version)
-        if libc_version:
-            rec = _make_virtual_package('__' + libc_family, libc_version)
+        if libc_version := os.getenv(
+            f"CONDA_OVERRIDE_{libc_family.upper()}", libc_version
+        ):
+            rec = _make_virtual_package(f'__{libc_family}', libc_version)
             index[rec] = rec
 
     if is_linux or is_osx:
@@ -200,8 +202,7 @@ def _supplement_index_with_system(index):
         index[rec] = rec
 
     archspec_name = get_archspec_name()
-    archspec_name = os.getenv("CONDA_OVERRIDE_ARCHSPEC", archspec_name)
-    if archspec_name:
+    if archspec_name := os.getenv("CONDA_OVERRIDE_ARCHSPEC", archspec_name):
         rec = _make_virtual_package('__archspec', "1", archspec_name)
         index[rec] = rec
 
@@ -254,8 +255,7 @@ def get_reduced_index(prefix, channels, subdirs, specs, repodata_fn):
         name = spec.get_raw_value('name')
         if name and name not in collected_names:
             pending_names.add(name)
-        track_features = spec.get_raw_value('track_features')
-        if track_features:
+        if track_features := spec.get_raw_value('track_features'):
             for ftr_name in track_features:
                 if ftr_name not in collected_track_features:
                     pending_track_features.add(ftr_name)

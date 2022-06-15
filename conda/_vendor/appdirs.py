@@ -63,7 +63,7 @@ def user_data_dir(appname, appauthor=None, version=None, roaming=False):
     if sys.platform.startswith("win"):
         if appauthor is None:
             raise AppDirsError("must specify 'appauthor' on Windows")
-        const = roaming and "CSIDL_APPDATA" or "CSIDL_LOCAL_APPDATA"
+        const = "CSIDL_APPDATA" if roaming else "CSIDL_LOCAL_APPDATA"
         path = os.path.join(_get_win_folder(const), appauthor, appname)
     elif sys.platform == 'darwin':
         path = os.path.join(
@@ -113,7 +113,7 @@ def site_data_dir(appname, appauthor=None, version=None):
     else:
         # XDG default for $XDG_CONFIG_DIRS[0]. Perhaps should actually
         # *use* that envvar, if defined.
-        path = "/etc/xdg/" + appname.lower()
+        path = f"/etc/xdg/{appname.lower()}"
     if version:
         path = os.path.join(path, version)
     return path
@@ -289,13 +289,7 @@ def _get_win_folder_with_pywin32(csidl_name):
     try:
         dir = unicode(dir)
 
-        # Downgrade to short path name if have highbit chars. See
-        # <http://bugs.activestate.com/show_bug.cgi?id=85099>.
-        has_high_char = False
-        for c in dir:
-            if ord(c) > 255:
-                has_high_char = True
-                break
+        has_high_char = any(ord(c) > 255 for c in dir)
         if has_high_char:
             try:
                 import win32api
@@ -318,13 +312,7 @@ def _get_win_folder_with_ctypes(csidl_name):
     buf = ctypes.create_unicode_buffer(1024)
     ctypes.windll.shell32.SHGetFolderPathW(None, csidl_const, None, 0, buf)
 
-    # Downgrade to short path name if have highbit chars. See
-    # <http://bugs.activestate.com/show_bug.cgi?id=85099>.
-    has_high_char = False
-    for c in buf:
-        if ord(c) > 255:
-            has_high_char = True
-            break
+    has_high_char = any(ord(c) > 255 for c in buf)
     if has_high_char:
         buf2 = ctypes.create_unicode_buffer(1024)
         if ctypes.windll.kernel32.GetShortPathNameW(buf.value, buf2, 1024):
@@ -357,9 +345,9 @@ if __name__ == "__main__":
     print("-- app dirs (without optional 'version')")
     dirs = AppDirs(appname, appauthor, version="1.0")
     for prop in props:
-        print("%s: %s" % (prop, getattr(dirs, prop)))
+        print(f"{prop}: {getattr(dirs, prop)}")
 
     print("\n-- app dirs (with optional 'version')")
     dirs = AppDirs(appname, appauthor)
     for prop in props:
-        print("%s: %s" % (prop, getattr(dirs, prop)))
+        print(f"{prop}: {getattr(dirs, prop)}")

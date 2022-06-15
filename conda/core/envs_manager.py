@@ -102,8 +102,7 @@ def list_all_known_prefixes():
 
 def query_all_prefixes(spec):
     for prefix in list_all_known_prefixes():
-        prefix_recs = tuple(PrefixData(prefix).query(spec))
-        if prefix_recs:
+        if prefix_recs := tuple(PrefixData(prefix).query(spec)):
             yield prefix, prefix_recs
 
 

@@ -218,7 +218,7 @@ else:  # pragma: no cover
         if path.startswith('\\\\?\\'):
             return path
         path = abspath(path)
-        if not path[1] == ':':
+        if path[1] != ':':
             # python doesn't include the drive letter, but \\?\ requires it
             path = getcwd()[:2] + path
         return '\\\\?\\' + path
@@ -364,7 +364,7 @@ else:  # pragma: no cover
         bytes = create_string_buffer(res)
         p_rdb = cast(bytes, POINTER(REPARSE_DATA_BUFFER))
         rdb = p_rdb.contents
-        if not rdb.tag == IO_REPARSE_TAG_SYMLINK:
+        if rdb.tag != IO_REPARSE_TAG_SYMLINK:
             raise ParseError("Expected IO_REPARSE_TAG_SYMLINK, but got %d" % rdb.tag)
 
         handle_nonzero_success(CloseHandle(handle))
@@ -434,25 +434,17 @@ class CrossPlatformStLink(object):
         st_nlink = cls._standard_st_nlink(path)
         if st_nlink != 0:
             return st_nlink
-        else:
-            # cannot trust python on Windows when st_nlink == 0
-            # get value using windows libraries to be sure of its true value
-            # Adapted from the ntfsutils package, Copyright (c) 2012, the Mozilla Foundation
-            GENERIC_READ = 0x80000000
-            FILE_SHARE_READ = 0x00000001
-            OPEN_EXISTING = 3
-            hfile = cls.CreateFile(path, GENERIC_READ, FILE_SHARE_READ, None,
-                                   OPEN_EXISTING, 0, None)
-            if hfile is None:
-                from ctypes import WinError
-                raise WinError()
-            info = cls.BY_HANDLE_FILE_INFORMATION()
-            rv = cls.GetFileInformationByHandle(hfile, info)
-            cls.CloseHandle(hfile)
-            if rv == 0:
-                from ctypes import WinError
-                raise WinError()
-            return info.nNumberOfLinks
+        hfile = cls.CreateFile(path, 0x80000000, 0x00000001, None, 3, 0, None)
+        if hfile is None:
+            from ctypes import WinError
+            raise WinError()
+        info = cls.BY_HANDLE_FILE_INFORMATION()
+        rv = cls.GetFileInformationByHandle(hfile, info)
+        cls.CloseHandle(hfile)
+        if rv == 0:
+            from ctypes import WinError
+            raise WinError()
+        return info.nNumberOfLinks
 
     @classmethod
     def _initialize(cls):

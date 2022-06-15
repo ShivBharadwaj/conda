@@ -49,8 +49,10 @@ def any_subprocess(args, prefix, env=None, cwd=None):
         if 'CONDA_TEST_SAVE_TEMPS' not in os.environ:
             rm_rf(script_caller)
         else:
-            log.warning('CONDA_TEST_SAVE_TEMPS :: retaining pip run_script {}'.format(
-                script_caller))
+            log.warning(
+                f'CONDA_TEST_SAVE_TEMPS :: retaining pip run_script {script_caller}'
+            )
+
     if hasattr(stdout, 'decode'):
         stdout = stdout.decode('utf-8', errors='replace')
     if hasattr(stderr, 'decode'):
@@ -63,7 +65,7 @@ def subprocess_call(command, env=None, path=None, stdin=None, raise_on_error=Tru
     """This utility function should be preferred for all conda subprocessing.
     It handles multiple tricky details.
     """
-    env = encode_environment(env if env else os.environ)
+    env = encode_environment(env or os.environ)
     cwd = sys.prefix if path is None else abspath(path)
     if not isiterable(command):
         command = shlex_split_unicode(command)

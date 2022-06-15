@@ -54,7 +54,7 @@ def pretty_diff(diff):
         fn = s[1:]
         name, version, _, channel = dist_str_to_quad(fn)
         if channel != DEFAULTS_CHANNEL_NAME:
-            version += ' (%s)' % channel
+            version += f' ({channel})'
         if s.startswith('-'):
             removed[name.lower()] = version
         elif s.startswith('+'):
@@ -63,16 +63,13 @@ def pretty_diff(diff):
     for name in sorted(changed):
         yield ' %s  {%s -> %s}' % (name, removed[name], added[name])
     for name in sorted(set(removed) - changed):
-        yield '-%s-%s' % (name, removed[name])
+        yield f'-{name}-{removed[name]}'
     for name in sorted(set(added) - changed):
-        yield '+%s-%s' % (name, added[name])
+        yield f'+{name}-{added[name]}'
 
 
 def pretty_content(content):
-    if is_diff(content):
-        return pretty_diff(content)
-    else:
-        return iter(sorted(content))
+    return pretty_diff(content) if is_diff(content) else iter(sorted(content))
 
 
 class History(object):
@@ -107,11 +104,10 @@ class History(object):
             try:
                 last = set(self.get_state())
             except CondaHistoryError as e:
-                warnings.warn("Error in %s: %s" % (self.path, e),
-                              CondaHistoryWarning)
+                warnings.warn(f"Error in {self.path}: {e}", CondaHistoryWarning)
                 return
             pd = PrefixData(self.prefix)
-            curr = set(prefix_rec.dist_str() for prefix_rec in pd.iter_records())
+            curr = {prefix_rec.dist_str() for prefix_rec in pd.iter_records()}
             self.write_changes(last, curr)
         except EnvironmentError as e:
             if e.errno in (EACCES, EPERM, EROFS):
@@ -134,9 +130,8 @@ class History(object):
             line = line.strip()
             if not line:
                 continue
-            m = sep_pat.match(line)
-            if m:
-                res.append((m.group(1), set(), []))
+            if m := sep_pat.match(line):
+                res.append((m[1], set(), []))
             elif line.startswith('#'):
                 res[-1][2].append(line)
             elif len(res) > 0:
@@ -176,19 +171,16 @@ class History(object):
           - "# install specs: python>=3.5.1,jupyter >=1.0.0,<2.0,matplotlib >=1.5.1,<2.0"
         """
         item = {}
-        m = cls.com_pat.match(line)
-        if m:
+        if m := cls.com_pat.match(line):
             argv = m.group(1).split()
             if argv[0].endswith('conda'):
                 argv[0] = 'conda'
             item['cmd'] = argv
 
-        m = cls.conda_v_pat.match(line)
-        if m:
+        if m := cls.conda_v_pat.match(line):
             item['conda_version'] = m.group(1)
 
-        m = cls.spec_pat.match(line)
-        if m:
+        if m := cls.spec_pat.match(line):
             action, specs_string = m.groups()
             specs_string = specs_string or ""
             item['action'] = action
@@ -198,14 +190,15 @@ class History(object):
             elif '[' not in specs_string:
                 specs = History._parse_old_format_specs_string(specs_string)
 
-            specs = [spec for spec in specs if spec and not spec.endswith('@')]
-
-            if specs and action in ('update', 'install', 'create'):
-                item['update_specs'] = item['specs'] = specs
-            elif specs and action in ('remove', 'uninstall'):
-                item['remove_specs'] = item['specs'] = specs
-            elif specs and action in ('neutered', ):
-                item['neutered_specs'] = item['specs'] = specs
+            if specs := [
+                spec for spec in specs if spec and not spec.endswith('@')
+            ]:
+                if action in ('update', 'install', 'create'):
+                    item['update_specs'] = item['specs'] = specs
+                elif action in ('remove', 'uninstall'):
+                    item['remove_specs'] = item['specs'] = specs
+                elif action in ('neutered',):
+                    item['neutered_specs'] = item['specs'] = specs
 
         return item
 
@@ -223,7 +216,7 @@ class History(object):
             item = {'date': dt}
             for line in comments:
                 comment_items = self._parse_comment_line(line)
-                item.update(comment_items)
+                item |= comment_items
 
             if 'cmd' in item:
                 res.append(item)
@@ -278,7 +271,7 @@ class History(object):
             for spec in remove_specs:
                 spec_map.pop(spec.name, None)
             update_specs = (MatchSpec(spec) for spec in request.get('update_specs', ()))
-            spec_map.update(((s.name, s) for s in update_specs))
+            spec_map |= ((s.name, s) for s in update_specs)
             # here is where the neutering takes effect, overriding past values
             neutered_specs = (MatchSpec(spec) for spec in request.get('neutered_specs', ()))
             spec_map.update(((s.name, s) for s in neutered_specs))
@@ -286,8 +279,10 @@ class History(object):
         # Conda hasn't always been good about recording when specs have been removed from
         # environments.  If the package isn't installed in the current environment, then we
         # shouldn't try to force it here.
-        prefix_recs = set(_.name for _ in PrefixData(self.prefix).iter_records())
-        return dict((name, spec) for name, spec in iteritems(spec_map) if name in prefix_recs)
+        prefix_recs = {_.name for _ in PrefixData(self.prefix).iter_records()}
+        return {
+            name: spec for name, spec in iteritems(spec_map) if name in prefix_recs
+        }
 
     def construct_states(self):
         """
@@ -305,7 +300,7 @@ class History(object):
                     elif s.startswith('+'):
                         cur.add(s[1:])
                     else:
-                        raise CondaHistoryError('Did not expect: %s' % s)
+                        raise CondaHistoryError(f'Did not expect: {s}')
             res.append((dt, cur.copy()))
         return res
 
@@ -327,7 +322,7 @@ class History(object):
         for i, (date, content, unused_com) in enumerate(self.parse()):
             print('%s  (rev %d)' % (date, i))
             for line in pretty_content(content):
-                print('    %s' % line)
+                print(f'    {line}')
             print('')
 
     def object_log(self):
@@ -343,9 +338,9 @@ class History(object):
                 'upgrade': [],
                 'downgrade': []
             }
-            added = {}
-            removed = {}
             if is_diff(content):
+                added = {}
+                removed = {}
                 for pkg in content:
                     name, version, build, channel = dist_str_to_quad(pkg[1:])
                     if pkg.startswith('+'):

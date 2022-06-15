@@ -63,7 +63,7 @@ class TemporaryDirectory(object):
             try:
                 _rm_rf(self.name)
             except (TypeError, AttributeError) as ex:
-                if "None" not in '%s' % (ex,):
+                if "None" not in f'{ex}':
                     raise
                 _rm_rf(self.name)
             self._closed = True
@@ -161,7 +161,7 @@ def create_application_entry_point(source_full_path, target_full_path, python_fu
     }
     if not isdir(dirname(target_full_path)):
         mkdir_p(dirname(target_full_path))
-    with open(target_full_path, str("w")) as fo:
+    with open(target_full_path, "w") as fo:
         if ' ' in python_full_path:
             python_full_path = ensure_pad(python_full_path, '"')
         fo.write('#!%s\n' % python_full_path)
@@ -355,7 +355,7 @@ def create_link(src, dst, link_type=LinkType.hardlink, force=False):
 
     if link_type == LinkType.hardlink:
         if isdir(src):
-            raise CondaError("Cannot hard link a directory. %s" % src)
+            raise CondaError(f"Cannot hard link a directory. {src}")
         try:
             log.trace("hard linking %s => %s", src, dst)
             link(src, dst)
@@ -378,7 +378,7 @@ def create_link(src, dst, link_type=LinkType.hardlink, force=False):
 def compile_multiple_pyc(python_exe_full_path, py_full_paths, pyc_full_paths, prefix, py_ver):
     py_full_paths = tuple(py_full_paths)
     pyc_full_paths = tuple(pyc_full_paths)
-    if len(py_full_paths) == 0:
+    if not py_full_paths:
         return []
 
     fd, filename = tempfile.mkstemp()
@@ -435,11 +435,10 @@ def create_package_cache_directory(pkgs_dir):
         touch(join(pkgs_dir, PACKAGE_CACHE_MAGIC_FILE), mkdir=True, sudo_safe=sudo_safe)
         touch(join(pkgs_dir, 'urls'), sudo_safe=sudo_safe)
     except (IOError, OSError) as e:
-        if e.errno in (EACCES, EPERM, EROFS):
-            log.trace("cannot create package cache directory '%s'", pkgs_dir)
-            return False
-        else:
+        if e.errno not in (EACCES, EPERM, EROFS):
             raise
+        log.trace("cannot create package cache directory '%s'", pkgs_dir)
+        return False
     return True
 
 
@@ -455,9 +454,8 @@ def create_envs_directory(envs_dir):
         sudo_safe = expand(envs_dir).startswith(expand('~'))
         touch(join(envs_dir, envs_dir_magic_file), mkdir=True, sudo_safe=sudo_safe)
     except (IOError, OSError) as e:
-        if e.errno in (EACCES, EPERM, EROFS):
-            log.trace("cannot create envs directory '%s'", envs_dir)
-            return False
-        else:
+        if e.errno not in (EACCES, EPERM, EROFS):
             raise
+        log.trace("cannot create envs directory '%s'", envs_dir)
+        return False
     return True
